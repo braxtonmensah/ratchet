@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use this pre-registration or its results, please cite it as below."
+type: software
+title: "Silicyte Ratchet (silicyte-0119): a pre-registered, compute-matched test of whether a verified-helper library compounds on ARC-AGI-1"
+abstract: >-
+  Pre-registration and harness for a compute-matched test on 400 sealed ARC-AGI-1 evaluation tasks.
+  A growing library of verified Python helpers (STOCK) is compared at equal total tokens with the same
+  library frozen after round 1 (STATIC), the same tokens in one round (ONE-SHOT), verified exemplars
+  (EXEMPLAR), a matched sham library (SHAM) and extra sampling with no library (FLAT-TTC), with two
+  planted positive controls (PLANT-DRIP, PLANT-L1). Registered 2026-11-04 at commit cc5fb5b. Result pending.
+authors:
+  - family-names: Mensah
+    given-names: Braxton
+    affiliation: Silicyte
+    email: hello@silicyte.com
+repository-code: "https://github.com/braxtonmensah/ratchet"
+url: "https://silicyte.com/ratchet"
+date-released: "2026-11-04"
+version: "prereg-cc5fb5b"
+keywords:
+  - arc-agi
+  - library-learning
+  - program-synthesis
+  - recursive-self-improvement
+  - preregistration
+  - compute-matched
+  - null-results
+references:
+  - type: conference-paper
+    title: "Is This LLM Library Learning? Evaluation Must Account For Compute and Behaviour"
+    authors:
+      - family-names: Berlot-Attwell
+        given-names: Ian
+      - family-names: Sesterhenn
+        given-names: Tobias
+      - family-names: Rudzicz
+        given-names: Frank
+      - family-names: Si
+        given-names: Xujie
+    year: 2026
+    doi: "10.18653/v1/2026.eacl-long.163"
+    collection-title: "Proceedings of the 19th Conference of the European Chapter of the Association for Computational Linguistics (Volume 1: Long Papers)"
