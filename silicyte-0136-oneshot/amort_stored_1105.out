@@ -1,0 +1,18 @@
+LEVER decoder solved rows 5701 mismatches 0
+L_WEIGHTS {"2": 0.3387, "3": 0.3093, "4": 0.1365, "5": 0.0824, "6": 0.0838, "7": 0.0304, "8": 0.0157, "9": 0.001, "10": 0.0021}
+Q1 s1 slope +0.02016 per round | 0.432 0.463 0.351 0.569 0.428 0.484 0.482 0.578 0.573 0.590 0.625
+Q3 s1 shortcut share | 0.062 0.085 0.096 0.056 0.071 0.090 0.099 0.100 0.092 0.109 0.127
+N  s1 solves | 65 71 73 89 84 89 91 100 109 110 118
+Q1 FRONTIER_s2 slope +0.01795 per round | 0.523 0.332 0.440 0.411 0.538 0.419 0.537 0.556 0.617 0.636 0.511
+Q3 FRONTIER_s2 shortcut share | 0.047 0.088 0.077 0.122 0.142 0.092 0.147 0.133 0.129 0.109 0.128
+N  FRONTIER_s2 solves | 64 68 78 98 106 98 109 113 116 110 125
+Q1 FRONTIER_s3 slope +0.02082 per round | 0.444 0.416 0.355 0.322 0.465 0.434 0.479 0.503 0.613 0.552 0.563
+Q3 FRONTIER_s3 shortcut share | 0.063 0.093 0.069 0.089 0.106 0.131 0.095 0.117 0.097 0.129 0.121
+N  FRONTIER_s3 solves | 63 75 72 79 85 99 95 103 103 101 107
+Q1 FRONTIER_s4 slope +0.02176 per round | 0.392 0.389 0.445 0.533 0.458 0.632 0.506 0.493 0.642 0.592 0.596
+Q3 FRONTIER_s4 shortcut share | 0.018 0.045 0.068 0.083 0.103 0.109 0.097 0.122 0.117 0.160 0.123
+N  FRONTIER_s4 solves | 57 66 74 84 87 92 93 98 111 125 114
+Q1_SUMMARY mean slope +0.02017 sd 0.00162 t 24.904 (crit 2.353) all_positive True
+Q2 per run (late<early, late>early, equal) {"s1": [26, 0, 48], "FRONTIER_s2": [24, 8, 45], "FRONTIER_s3": [25, 5, 47], "FRONTIER_s4": [21, 4, 43]}
+Q2_SUMMARY late_lower 96 late_higher 17 equal 183 one-sided p 7.364e-15
+GATE_STORED_AMORT SIGNAL
