@@ -1,0 +1,14 @@
+A1R10 SEED 1 s1 rounds=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] d50_fixed=[2.863, 3.101, 3.168, 3.738, 3.532, 3.723, 3.781, 4.08, 4.398, 4.428, 4.682] c=0.0009650349650349695 mean_gain=0.18190000000000003
+A1R10 SEED 2 FRONTIER_s2 rounds=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] d50_fixed=[2.86, 2.956, 3.292, 3.984, 4.234, 4.033, 4.386, 4.511, 4.617, 4.437, 4.9] c=-0.018684149184149082 mean_gain=0.20400000000000004
+A1R10 SEED 3 FRONTIER_s3 rounds=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] d50_fixed=[2.778, 3.231, 3.148, 3.381, 3.551, 4.058, 3.905, 4.204, 4.201, 4.091, 4.305] c=-0.01208158508158417 mean_gain=0.15269999999999997
+A1R10 SEED 4 FRONTIER_s4 rounds=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] d50_fixed=[2.635, 2.96, 3.22, 3.502, 3.659, 3.803, 3.814, 4.001, 4.447, 4.844, 4.473] c=-0.005277389277389169 mean_gain=0.18380000000000002
+A1R10 SHAPE {"K": 4, "mean_c": -0.008769522144521863, "sd_c": 0.008489722891333594, "t": -2.065914814127536, "df": 3, "crit": 2.605, "pass": false}
+A1R10 LEVEL {"mean_gain": 0.1806, "sd": 0.021117922877656976, "lower95": 0.15575476373443659, "pass": true}
+A1R10 LABEL LINEAR-GROWTH (worded "within 10 rounds"; read before and unchanged by the A4 labels)
+DEEP SEED 1 s1 pool=39100 R*=-1 (R_ext / last deep round -1) delta=None slope_0_10=None slope_11_R*=None ratio=None mean_gain=None EXCLUDED: R*_k = -1 < 15 (fewer than 5 late rounds)
+DEEP SEED 2 FRONTIER_s2 pool=39200 R*=-1 (R_ext / last deep round -1) delta=None slope_0_10=None slope_11_R*=None ratio=None mean_gain=None EXCLUDED: R*_k = -1 < 15 (fewer than 5 late rounds)
+DEEP SEED 3 FRONTIER_s3 pool=39300 R*=-1 (R_ext / last deep round -1) delta=None slope_0_10=None slope_11_R*=None ratio=None mean_gain=None EXCLUDED: R*_k = -1 < 15 (fewer than 5 late rounds)
+DEEP SEED 4 FRONTIER_s4 pool=39400 R*=-1 (R_ext / last deep round -1) delta=None slope_0_10=None slope_11_R*=None ratio=None mean_gain=None EXCLUDED: R*_k = -1 < 15 (fewer than 5 late rounds)
+LATE_TAKEOFF_SHAPE not computable: 0 seed(s) in L
+GATES {"DETERMINISM MATCH": false, "CONTROL PASS": false, "POST OK x runs": false, "overlap 0": false}
+EXT LABEL REFUSED: a gate is missing or failed (determinism, control, extend post, overlap)
