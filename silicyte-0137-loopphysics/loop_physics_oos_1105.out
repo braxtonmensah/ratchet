@@ -1,0 +1,6 @@
+s1 fit alpha 0.1041 gamma 1.5576 cal 1.598 | actual 3.78 4.08 4.40 4.43 4.68 | law 3.84 3.93 4.00 4.07 4.13 | linear 3.97 4.15 4.32 4.50 4.67 | MAE law 0.307 linear 0.082
+FRONTIER_s2 fit alpha 0.1776 gamma 0.5710 cal 1.542 | actual 4.39 4.51 4.62 4.44 4.90 | law 4.45 4.60 4.74 4.86 4.97 | linear 4.60 4.90 5.19 5.49 5.79 | MAE law 0.155 linear 0.623
+FRONTIER_s3 fit alpha 0.1208 gamma 1.3383 cal 1.595 | actual 3.90 4.20 4.20 4.09 4.30 | law 3.92 4.02 4.11 4.19 4.26 | linear 4.12 4.33 4.55 4.77 4.98 | MAE law 0.087 linear 0.410
+FRONTIER_s4 fit alpha 0.1652 gamma 1.7421 cal 1.614 | actual 3.81 4.00 4.45 4.84 4.47 | law 4.15 4.31 4.46 4.59 4.72 | linear 4.12 4.35 4.59 4.82 5.06 | MAE law 0.230 linear 0.281
+OOS_SUMMARY pooled MAE law 0.195 linear 0.349, law wins 3 of 4
+GATE_LOOP_PHYSICS_OOS PREDICTS
