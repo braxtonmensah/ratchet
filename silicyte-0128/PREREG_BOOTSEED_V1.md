@@ -203,3 +203,26 @@ mean gain of 0.26 d50 per round, linear growth alone saturates it near round 25.
    - NULL otherwise.
    A1's R = 10 labels are read first and are not changed by any of these.
 5. **Prediction** (stated now): P(LATE-TAKEOFF) = 0.10; most likely NO-TAKEOFF-BY-R.
+
+### A4 DRAFT, fixed parameters (added 2026-11-05 09:13 ET, from ext/BUILD_A4_0128.md; still before any round-11 data)
+- MEAS_DEEP: frozen/MEAS_DEEP_39000.json, sha256 3d9a63dcf72fb790c94995e1656ae089642af6fd3ebba0cde6efb58a0916229c.
+  - 120 tasks: 6 per depth, depths 1..20. D_deep = 20.
+  - Scored with beam B 4 and max_steps 20.
+  - Overlap: 0 shared tids, tasks or inputs with MEAS 29000, with every data pool for k 1..4 and t 0..30, and with the enumerated
+    frontier pools. ext/overlap_actual.py re-checks each round's actual pools exactly, and a hit on a scored round is VOID for
+    that round's deep reading.
+- Deep scoring runs on a GPU other than the seed's own (from saved P_t adapter files, measurement only), so it never changes a
+  seed's rounds or timing. It is done by ext/score_deep.py, whose determinism is checked on one adapter scored twice before any
+  read.
+- Continuation:
+  - Seed 1: relaunch with t_to 30 at its clean exit (bootseed.py:103-145 trains round 10).
+  - Seeds 2 to 4: after the scored-only round 10, move round_10.json, search_10.json and tel_10.json aside; then ext/extend_0128.py
+    checks row counts and md5s and relaunches with t_to 30, so round 10 re-runs as a trained round. Its MEAS rows must equal the
+    archived scored-only rows (same P_10, deterministic beam), else VOID for that seed's extension.
+- Reads:
+  - The R = 10 registered read is restricted to rounds 0..10 (ext/read_0128_ext.py; the registered read_0128.py would include
+    later rounds).
+  - m_hat's CI is a t interval across seeds on log m_hat.
+- Noise: at 6 tasks per depth, d50_deep noise is about 0.34 to 0.44. The re-sim gives power 0.85 to 0.95 and a false-positive rate
+  of 0.05 to 0.062. Per point 3, the alpha is lowered to hold the false-positive rate at <= 0.05 at the measured noise, if needed;
+  the critical value is printed with the read.
