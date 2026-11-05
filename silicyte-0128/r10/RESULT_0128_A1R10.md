@@ -62,3 +62,18 @@ So acceleration of 20% per round or more is ruled out over these 10 rounds; 10% 
   (ext/archive/FRONTIER_sk/round_10.scored_only.json, md5 prefixes 6dc7d7b4 / a944b63b / 2c0e59fc). Those seeds are re-running
   round 10 as a trained round. A4 requires the redone MEAS rows to equal these exactly (extend_0128.py post), and that check is
   pending; if it fails, this note will say so.
+
+## Exploratory appendix (not registered): no depth band accelerates either (16:53 ET)
+
+Solve fraction on the fixed pool by depth band. Curvature is the per-seed quadratic c on logit((solved + 0.5) / (failed + 0.5)) over
+rounds 0..10, with a t across the 4 seeds. Read from the same round files as above.
+
+| band | tasks | solve rate, round 0 -> 10, range over seeds | mean c | sd | t |
+|---|---|---|---|---|---|
+| d3-4 | 61 | 0.16-0.26 -> 0.57-0.66 | -0.0145 | 0.0073 | -3.97 |
+| d5-6 | 55 | 0.05-0.07 -> 0.15-0.38 | -0.0130 | 0.0134 | -1.94 |
+| d7-10 | 133 | 0.00-0.02 -> 0.07-0.12 | -0.0086 | 0.0172 | -1.00 |
+
+- The hardest tasks improve 5 to 10x over 10 rounds, but at a steady or slowing rate.
+- d3-4 bends down significantly, as expected from a band approaching saturation.
+- So the linear d50 is not hiding an acceleration at the frontier.
