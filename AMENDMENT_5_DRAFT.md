@@ -35,6 +35,19 @@ The smoke uses the 50 pilot growth ids at S = 4 for P0 (V1 control), P1 and P2, 
 - H = share of demo-passing programs with at least one top-level helper reachable from transform;
 - D = demo-pass tasks of 50.
 
+Exact definitions (added 2026-11-05 07:14 ET, after the verifier's GO and before the smoke job was submitted; per
+diag/VERDICT_SMOKE_A5.md item 1):
+- H's numerator counts demo-passing programs with at least one helper that is (i) a top-level def other than transform,
+  (ii) reachable from transform, and (iii) valid under PREREG 4's extraction rule. Rule (iii) drops a helper whose free
+  names are not builtins, allowed imports or other valid helpers, so a helper that reads a module-level constant does
+  not count.
+- H's denominator is demo-passing programs (samples), not tasks and not deduped solutions.
+- A counts helpers.accept on the deduped demo-passing solutions with an empty previous library.
+
+Provenance: the smoke runs code dir b636ce5 plus two files that commit does not contain. They are diag/smoke_a5.py
+(sha256 f765be121421835c59b3f2a9b93edd4b4e132c6e7d499c012acf710e6a28d06d) and slurm/smoke_a5.sbatch (sha256
+745c7cac3647e4fcc51db252012a544a13a973436ebc99eba3481d2d8305b76e), both pushed in 02eb335.
+
 A variant QUALIFIES if all three hold:
 - A >= 5;
 - H >= 0.20;
