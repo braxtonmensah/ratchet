@@ -1,0 +1,314 @@
+[
+ {
+  "R": 20,
+  "ruler": "deep",
+  "m": 1,
+  "T0": 10,
+  "declare_rate": 0.0335
+ },
+ {
+  "R": 20,
+  "ruler": "deep",
+  "m": 1.05,
+  "T0": 10,
+  "declare_rate": 0.656
+ },
+ {
+  "R": 20,
+  "ruler": "deep",
+  "m": 1.1,
+  "T0": 10,
+  "declare_rate": 0.8945
+ },
+ {
+  "R": 20,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 10,
+  "declare_rate": 0.948
+ },
+ {
+  "R": 20,
+  "ruler": "deep",
+  "m": 1.1,
+  "T0": 15,
+  "declare_rate": 0.2965
+ },
+ {
+  "R": 20,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 15,
+  "declare_rate": 0.696
+ },
+ {
+  "R": 20,
+  "ruler": "depth10",
+  "m": 1,
+  "T0": 10,
+  "declare_rate": 0.023
+ },
+ {
+  "R": 20,
+  "ruler": "depth10",
+  "m": 1.05,
+  "T0": 10,
+  "declare_rate": 0.221
+ },
+ {
+  "R": 20,
+  "ruler": "depth10",
+  "m": 1.1,
+  "T0": 10,
+  "declare_rate": 0.3135
+ },
+ {
+  "R": 20,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 10,
+  "declare_rate": 0.297
+ },
+ {
+  "R": 20,
+  "ruler": "depth10",
+  "m": 1.1,
+  "T0": 15,
+  "declare_rate": 0.091
+ },
+ {
+  "R": 20,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 15,
+  "declare_rate": 0.227
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1,
+  "T0": 10,
+  "declare_rate": 0.044
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1.05,
+  "T0": 10,
+  "declare_rate": 0.9205
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1.1,
+  "T0": 10,
+  "declare_rate": 0.951
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 10,
+  "declare_rate": 0.9555
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1.1,
+  "T0": 15,
+  "declare_rate": 0.9365
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 15,
+  "declare_rate": 0.948
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 20,
+  "declare_rate": 0.925
+ },
+ {
+  "R": 30,
+  "ruler": "depth10",
+  "m": 1,
+  "T0": 10,
+  "declare_rate": 0.0035
+ },
+ {
+  "R": 30,
+  "ruler": "depth10",
+  "m": 1.05,
+  "T0": 10,
+  "declare_rate": 0.021
+ },
+ {
+  "R": 30,
+  "ruler": "depth10",
+  "m": 1.1,
+  "T0": 10,
+  "declare_rate": 0.02
+ },
+ {
+  "R": 30,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 10,
+  "declare_rate": 0.011
+ },
+ {
+  "R": 30,
+  "ruler": "depth10",
+  "m": 1.1,
+  "T0": 15,
+  "declare_rate": 0.0295
+ },
+ {
+  "R": 30,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 15,
+  "declare_rate": 0.0315
+ },
+ {
+  "R": 30,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 20,
+  "declare_rate": 0.02
+ },
+ {
+  "R": 40,
+  "ruler": "deep",
+  "m": 1,
+  "T0": 10,
+  "declare_rate": 0.0475
+ },
+ {
+  "R": 40,
+  "ruler": "deep",
+  "m": 1.05,
+  "T0": 10,
+  "declare_rate": 0.9425
+ },
+ {
+  "R": 40,
+  "ruler": "deep",
+  "m": 1.1,
+  "T0": 10,
+  "declare_rate": 0.9545
+ },
+ {
+  "R": 40,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 10,
+  "declare_rate": 0.956
+ },
+ {
+  "R": 40,
+  "ruler": "deep",
+  "m": 1.1,
+  "T0": 15,
+  "declare_rate": 0.954
+ },
+ {
+  "R": 40,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 15,
+  "declare_rate": 0.9535
+ },
+ {
+  "R": 40,
+  "ruler": "deep",
+  "m": 1.2,
+  "T0": 20,
+  "declare_rate": 0.956
+ },
+ {
+  "R": 40,
+  "ruler": "depth10",
+  "m": 1,
+  "T0": 10,
+  "declare_rate": 0.0005
+ },
+ {
+  "R": 40,
+  "ruler": "depth10",
+  "m": 1.05,
+  "T0": 10,
+  "declare_rate": 0.002
+ },
+ {
+  "R": 40,
+  "ruler": "depth10",
+  "m": 1.1,
+  "T0": 10,
+  "declare_rate": 0.0035
+ },
+ {
+  "R": 40,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 10,
+  "declare_rate": 0.001
+ },
+ {
+  "R": 40,
+  "ruler": "depth10",
+  "m": 1.1,
+  "T0": 15,
+  "declare_rate": 0.004
+ },
+ {
+  "R": 40,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 15,
+  "declare_rate": 0.0025
+ },
+ {
+  "R": 40,
+  "ruler": "depth10",
+  "m": 1.2,
+  "T0": 20,
+  "declare_rate": 0.0025
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1,
+  "T0": 10,
+  "sm": 0.12,
+  "declare_rate": 0.054
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1,
+  "T0": 10,
+  "sm": 0.25,
+  "declare_rate": 0.034
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1,
+  "T0": 10,
+  "sw": 0,
+  "declare_rate": 0.037
+ },
+ {
+  "R": 30,
+  "ruler": "deep",
+  "m": 1,
+  "T0": 10,
+  "sw": 0.15,
+  "declare_rate": 0.047
+ }
+]
