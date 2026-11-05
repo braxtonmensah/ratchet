@@ -9,6 +9,12 @@ then one {"ev": "done", ...}. The program's own prints go to the parent's stderr
 Order: rlimits, optional numpy pre-import, audit hook, then library exec (skipped in mode 'inline'), program exec, demos
 (stop at the first failure), test inputs (only if every demo passed; helper calls counted on test inputs only).
 Per input: signal.setitimer(ITIMER_REAL, timeout_s); a timed-out input is TIMEOUT.
+
+Harness v2 (PLANT_FAIL_DIAGNOSIS 4.1): the library runs in its own namespace and reaches the program through the type
+adapter (_adapt): arguments at parameters annotated Grid, Element or Piece that are non-empty lists of rows go in as
+tuples of tuples, tuple-of-tuples results of functions so annotated come back as lists of lists, and every other helper
+is the same function object. Call counting wraps the functions inside the library namespace, as in v1. The request key
+`adapter` (default true) exists only so tests can reproduce the v1 boundary; no driver path sets it.
 """
 import builtins
 import functools
@@ -142,6 +148,119 @@ def _norm(out, max_side, n_colours):
             row.append(iv)
         rows.append(row)
     return rows
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# type adapter (harness v2; PLANT_FAIL_DIAGNOSIS 4.1). Same rule as ratchet/adapter.py (this file never imports the
+# package); tests/test_v2_adapter.py checks the two copies agree.
+
+_GRID_TYPES = frozenset(('Grid', 'Element', 'Piece'))
+
+
+def _is_grid_ann(a):
+    # A string annotation. Under `from __future__ import annotations` a quoted 'Grid' arrives as "'Grid'" and a bare
+    # Grid as 'Grid'; both count (ratchet/adapter.py reads the source the same way).
+    return isinstance(a, str) and a.strip().strip('\'"').strip() in _GRID_TYPES
+
+
+def _grid_sig(fn):
+    """(positional indices, keyword names, return) that are grid-typed by fn's own annotations, or None."""
+    try:
+        ann = dict(getattr(fn, '__annotations__', None) or {})
+    except Exception:  # noqa: BLE001  (a hostile __annotations__ property)
+        return None
+    code = getattr(fn, '__code__', None)
+    if code is None or not ann:
+        return None
+    npos = code.co_argcount
+    nkw = code.co_kwonlyargcount
+    names = code.co_varnames[:npos + nkw]
+    pos = tuple(i for i, nm in enumerate(names[:npos]) if _is_grid_ann(ann.get(nm)))
+    kw = frozenset(nm for nm in names[code.co_posonlyargcount:] if _is_grid_ann(ann.get(nm)))
+    ret = _is_grid_ann(ann.get('return'))
+    if not pos and not kw and not ret:
+        return None
+    return pos, kw, ret
+
+
+def _to_tuple_grid(x):
+    if isinstance(x, list) and x and all(isinstance(r, (list, tuple)) for r in x):
+        return tuple(tuple(r) for r in x)
+    return x
+
+
+def _to_list_grid(x):
+    if isinstance(x, tuple) and x and all(isinstance(r, tuple) for r in x):
+        return [list(r) for r in x]
+    return x
+
+
+_CO_VARARGS = 0x04
+_CO_VARKEYWORDS = 0x08
+
+
+def _clone_signature(fn, impl):
+    """A function with fn's exact parameter list (so fn.__code__.co_argcount and friends are preserved) that calls
+    impl(*positional, *varargs, kwonly=..., **varkw). arc-dsl's rbind / lbind pick a lambda's arity from
+    function.__code__.co_argcount, so a bare (*a, **k) wrapper (v1's call counter) breaks every solver that binds a
+    library function (harness v2 finding: 19 of 50 pilot solvers). Falls back to a (*a, **k) wrapper for callables
+    without a plain code object."""
+    code = getattr(fn, '__code__', None)
+    if code is None or not hasattr(code, 'co_varnames'):
+        @functools.wraps(fn)
+        def generic(*a, **k):
+            return impl(*a, **k)
+        return generic
+    npos, nposonly, nkw = code.co_argcount, code.co_posonlyargcount, code.co_kwonlyargcount
+    names = code.co_varnames
+    pos = list(names[:npos])
+    kwo = list(names[npos:npos + nkw])
+    i = npos + nkw
+    star = names[i] if code.co_flags & _CO_VARARGS else None
+    i += 1 if star else 0
+    dstar = names[i] if code.co_flags & _CO_VARKEYWORDS else None
+    allp = pos + kwo + [n for n in (star, dstar) if n]
+    if '_rt_impl' in allp or not all(isinstance(n, str) and n.isidentifier() for n in allp):
+        @functools.wraps(fn)
+        def generic2(*a, **k):
+            return impl(*a, **k)
+        return generic2
+    parts = pos[:nposonly] + (['/'] if nposonly else []) + pos[nposonly:]
+    if star:
+        parts.append('*' + star)
+    elif kwo:
+        parts.append('*')
+    parts += kwo
+    if dstar:
+        parts.append('**' + dstar)
+    call = pos + (['*' + star] if star else []) + ['%s=%s' % (k, k) for k in kwo] + (['**' + dstar] if dstar else [])
+    ns = {'_rt_impl': impl}
+    exec('def _rt_w(%s):\n    return _rt_impl(%s)\n' % (', '.join(parts), ', '.join(call)), ns)
+    w = ns['_rt_w']
+    w.__defaults__ = getattr(fn, '__defaults__', None)
+    w.__kwdefaults__ = getattr(fn, '__kwdefaults__', None)
+    functools.update_wrapper(w, fn)
+    return w
+
+
+def _adapt(fn, sig):
+    """The program-side view of library function fn: identity (the same object) when sig is None."""
+    if sig is None:
+        return fn
+    pos, kw, ret = sig
+
+    def adapted(*args, **kwargs):
+        if pos:
+            args = list(args)
+            for i in pos:
+                if i < len(args):
+                    args[i] = _to_tuple_grid(args[i])
+        for k in kw:
+            if k in kwargs:
+                kwargs[k] = _to_tuple_grid(kwargs[k])
+        out = fn(*args, **kwargs)
+        return _to_list_grid(out) if ret else out
+    return _clone_signature(fn, adapted)
 
 
 def _emit_fd(fd, obj):
@@ -334,32 +453,45 @@ def run_request(req):
 
     g = {'__name__': '__ratchet_program__', '__builtins__': safe_builtins}
 
-    # library
+    # library (harness v2, PLANT_FAIL_DIAGNOSIS 4.1): executed in its own namespace lib_g, so library-internal calls
+    # resolve inside lib_g and arc-dsl's own tuple dispatch is never disturbed. The call counters wrap the functions IN
+    # lib_g (internal calls are still counted: helper_calls semantics unchanged). The program's globals g then receive
+    # every public library name: functions through _adapt (identity unless the helper's own annotations name a grid
+    # type), every other value as is (as in v1, where the library ran in g).
     lib_names = []
     if mode != 'inline' and lib.strip():
+        lib_g = {'__name__': '__ratchet_library__', '__builtins__': safe_builtins}
         try:
             lib_code = compile(lib, '<library>', 'exec')
         except BaseException as e:   # noqa: BLE001
             finish('ERROR', f'LIBRARY_SYNTAX:{type(e).__name__}')
-        _, st, err, _w = timed(exec, lib_code, g)
+        _, st, err, _w = timed(exec, lib_code, lib_g)
         if st != 'OK':
             finish('ERROR' if st == 'ERROR' else 'TIMEOUT', f'LIBRARY:{err}' if st == 'ERROR' else 'LIB_TIMEOUT')
-        lib_names = [k for k, v in g.items()
+        lib_names = [k for k, v in lib_g.items()
                      if callable(v) and getattr(getattr(v, '__code__', None), 'co_filename', None) == '<library>']
         res['helpers_callable'] = len(lib_names)
         trace = req.get('trace')
-        names = lib_names if not trace else [n for n in trace if n in g and callable(g[n])]
+        names = lib_names if not trace else [n for n in trace if n in lib_g and callable(lib_g[n])]
+        sigs = {n: _grid_sig(lib_g[n]) for n in lib_names}
 
         def wrap(name, fn):
-            @functools.wraps(fn)
             def w(*a, **k):
                 if state['counting']:
                     calls[name] = calls.get(name, 0) + 1
                 return fn(*a, **k)
-            return w
+            return _clone_signature(fn, w)   # same counting as v1, with fn's own signature (rbind / lbind arity)
 
         for n in names:
-            g[n] = wrap(n, g[n])
+            lib_g[n] = wrap(n, lib_g[n])
+        adapt_on = bool(req.get('adapter', True))
+        for k, v in lib_g.items():
+            if k.startswith('__') and k.endswith('__'):
+                continue
+            if k in sigs and adapt_on:
+                g[k] = _adapt(v, sigs[k])
+            else:
+                g[k] = v
 
     # program
     try:

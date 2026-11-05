@@ -295,12 +295,31 @@ def sealed_seeds(run) -> tuple[int, ...]:
     return tuple(run.cfg.get('sealed_seeds', config.SEALED_SEEDS))
 
 
+def screen_decision(run) -> str | None:
+    """'F3' or 'V1' from pilot/SCREEN.json, None before the screen. Anything else stops the plan (refused)."""
+    p = Path(run.dir if hasattr(run, 'dir') else run) / 'pilot' / 'SCREEN.json'
+    if not p.exists():
+        return None
+    d = (read_json(p, {}) or {}).get('decision')
+    if d not in config.PILOT_AFTER_SCREEN:
+        raise ValueError('SCREEN_DECISION_INVALID %r in %s' % (d, p))
+    return d
+
+
 def plan(run) -> list[WorkUnit]:
     """Deterministic order of every unit of the run. Units past a missing S/R are not planned yet."""
     check_test_switches(run)
     u: list[WorkUnit] = []
     if not run.cfg.get('skip_pilot'):
-        for which in config.PILOT_WHICH:
+        # Pilot v2 (VERDICT_AMENDMENT_2 3.5, sequential screen): FLAT_A under F3, the screen FLAT_S, the decision, then
+        # the remaining gate arms under the instruction the screen left (pilot/<which> or pilot/V1_<which>).
+        u.append(WorkUnit('pilot', 'FLAT_A', 'pilot', None, None, 'FLAT_A'))
+        u.append(WorkUnit('pilot', config.PILOT_SCREEN, 'pilot', None, None, config.PILOT_SCREEN))
+        u.append(WorkUnit('pilot_screen'))
+        decision = screen_decision(run)
+        if decision is None:
+            return u
+        for which in config.PILOT_AFTER_SCREEN[decision]:
             u.append(WorkUnit('pilot', which, 'pilot', None, None, which))
         u.append(WorkUnit('pilot_choose'))
     if run.S is None or run.R is None:
@@ -399,6 +418,8 @@ def unit_done(run, unit: WorkUnit) -> bool:
         return _state_of(unit_state_path(run, unit)) == 'DONE'
     if k == 'pilot_choose':
         return (d / 'pilot' / 'PILOT_CHOICE.json').exists()
+    if k == 'pilot_screen':
+        return (d / 'pilot' / 'SCREEN.json').exists()
     if k == 'freeze_libraries':
         return (freeze_dir(run) / 'FREEZE.json').exists()
     if k == 'freeze_submissions':

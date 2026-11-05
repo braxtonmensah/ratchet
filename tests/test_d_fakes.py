@@ -119,9 +119,10 @@ class PromptBuild:
 class FakePrompt:
     def __init__(self, library_mod):
         self.lib = library_mod
+        self.instructions_seen = []
 
     def build_messages(self, task, tok, *, library=None, exemplars=None, inline_noncallable=False, drop=frozenset(),
-                       cap_tokens=6000, inline_library=None):
+                       cap_tokens=6000, inline_library=None, instruction=None):
         names, ltok, lsha = (), 0, None
         inl = tuple(sorted(h.name for h in inline_library.helpers)) if inline_library is not None else ()
         if library is not None:
@@ -135,9 +136,14 @@ class FakePrompt:
             etok = sum(e.token_len for e in exemplars)
         user = 'LIB %s INLINE %d EX %s TASK %s' % (','.join(names), int(inline_noncallable or bool(inl)),
                                                   ','.join(ex_ids) + ('|TEXT ' + ','.join(inl) if inl else ''), task.id)
+        self.instructions_seen.append(instruction)
         return PromptBuild(messages=[{'role': 'system', 'content': 'SYS'}, {'role': 'user', 'content': user}],
                            library_tokens=ltok, exemplar_tokens=etok, task_tokens=10, instruction_tokens=5,
                            helpers_in_context=names, lib_sha=lsha, exemplar_ids=ex_ids, helpers_inline=inl)
+
+    def library_block(self, lib, cap_tokens, tok):
+        names = tuple(sorted(h.name for h in lib.helpers))
+        return 'LIB ' + ','.join(names), names, sum(h.token_len for h in lib.helpers)
 
 
 class FakeExtract:
@@ -524,6 +530,11 @@ class FakePlant:
         return {'dir': str(dir)}
 
     @staticmethod
+    def solver_library(src, task_id, tok, arm='PLANT_SOLVE'):
+        hs = [Helper('solve_this', _sha('solve:' + task_id), 5, [task_id]), Helper('p0', _sha('p0'), 4, ['solver'])]
+        return Library(arm, 1, hs, None, {'pilot_only': True, 'task': task_id})
+
+    @staticmethod
     def build_tranches(src, R, cap_tokens, tok):
         prims = ['p%d' % i for i in range(2 * R)]
         out = []
@@ -560,8 +571,11 @@ class FakeSelect:
 
 
 class FakePilot:
-    def __init__(self, S=2, R=2, smoke=True):
-        self.S, self.R, self.smoke = S, R, smoke
+    def __init__(self, S=2, R=2, smoke=True, decision='F3'):
+        self.S, self.R, self.smoke, self.decision = S, R, smoke, decision
+
+    def screen_decision(self, run_dir):
+        return {'decision': self.decision, 'stands': self.decision == 'F3', 'demo_pass_tasks': 0, 'pass2_tasks': 0}
 
     def step1_smoke(self, run_dir):
         return {'pass': self.smoke}

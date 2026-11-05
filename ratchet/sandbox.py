@@ -387,7 +387,10 @@ def _deny_roots() -> list[str]:
 
 def run_program(code: str | None, library_src: str, demo_inputs: list[Grid], demo_outputs: list[Grid],
                 test_inputs: list[Grid], *, timeout_s: float = TIMEOUT_S, trace: Sequence[str] | None = (),
-                mem_mb: int = MEM_MB, mode: str = 'callable', sample_id: str = '', net: str | None = None) -> ExecResult:
+                mem_mb: int = MEM_MB, mode: str = 'callable', sample_id: str = '', net: str | None = None,
+                adapter: bool = True) -> ExecResult:
+    """adapter=False reproduces the v1 boundary (no type adapter); only tests pass it (the lever-check positive control
+    and the v1 replay baseline). ExecJob and run_batch carry no such field, so no driver path can turn the adapter off."""
     if mode not in EXEC_MODES:
         raise ValueError(f'mode {mode!r}')
     csha = code_sha(code)
@@ -410,7 +413,7 @@ def run_program(code: str | None, library_src: str, demo_inputs: list[Grid], dem
            'fsize_mb': FSIZE_MB, 'trace': list(trace) if trace else None, 'allow_imports': list(IMPORT_ALLOW),
            'blocked_imports': list(BLOCKED_IMPORTS), 'deny_roots': _deny_roots(),
            'preimport_numpy': 'numpy' in src, 'max_side': GRID_MAX_SIDE, 'n_colours': N_COLOURS,
-           'agg_windows': AGG_WINDOWS, 'import_pad_s': IMPORT_PAD_S}
+           'agg_windows': AGG_WINDOWS, 'import_pad_s': IMPORT_PAD_S, 'adapter': bool(adapter)}
     payload = json.dumps(req, separators=(',', ':')).encode()
     n_inputs = n_demos + len(test_inputs)
     hard_s = timeout_s * (n_inputs + AGG_WINDOWS) + HARD_PAD_S
@@ -446,6 +449,34 @@ def run_program(code: str | None, library_src: str, demo_inputs: list[Grid], dem
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return _parse_child(out, rc, killed, base, refs, n_demos)
+
+
+def adapter_smoke(library_src: str, grid: Grid, *, net: str | None = None, timeout_s: float = 30.0,
+                  adapter: bool = True) -> dict:
+    """Lever check of the type adapter (PLANT_FAIL_DIAGNOSIS 4.3) through the real sandbox path: every library function
+    whose first positional parameter is grid-typed is called through the adapter on `grid` as a list of lists and as a
+    tuple of tuples (defaults for the other parameters). ok is False when any helper raises on the list grid where the
+    tuple call does not, when the two calls return different values, or when the check itself did not run."""
+    from . import adapter as _ad
+    names = _ad.grid_helpers(library_src)
+    out = {'grid_helpers': len(names), 'list_smoke_ok': 0, 'codes': {}, 'refused': [], 'status': 'OK', 'error': None,
+           'ok': True}
+    if not names:
+        return out
+    prog, names = _ad.smoke_program(library_src)
+    g = tuple(tuple(int(v) for v in r) for r in grid)
+    r = run_program(prog, library_src, [], [], [g], timeout_s=timeout_s, mode='callable',
+                    sample_id='lever_adapter', net=net, adapter=adapter)
+    out['status'], out['error'] = r.status, r.error
+    if r.status != STATUS_OK or not r.test_outputs:
+        out.update(ok=False, refused=list(names))
+        return out
+    codes = _ad.decode_smoke(names, r.test_outputs[0])
+    out['codes'] = codes
+    out['list_smoke_ok'] = sum(1 for c in codes.values() if c in (_ad.SMOKE_BOTH_OK, _ad.SMOKE_TUPLE_RAISES))
+    out['refused'] = [n for n, c in codes.items() if c in _ad.SMOKE_REFUSE or c == 0]
+    out['ok'] = not out['refused']
+    return out
 
 
 def spawn_mode() -> str:

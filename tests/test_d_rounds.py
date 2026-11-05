@@ -63,7 +63,18 @@ class TestPlan(unittest.TestCase):
 
     def test_no_SR_plans_pilot_only(self):
         run = mkrun(self.tmp, S=None, R=None)
-        self.assertEqual([u.kind for u in rounds.plan(run)], ['pilot', 'pilot', 'pilot', 'pilot_choose'])
+        # pilot v2: FLAT_A, the screen FLAT_S, the decision; the rest is planned once pilot/SCREEN.json exists
+        self.assertEqual([(u.kind, u.condition) for u in rounds.plan(run)],
+                         [('pilot', 'FLAT_A'), ('pilot', 'FLAT_S'), ('pilot_screen', None)])
+        (self.tmp / 'pilot').mkdir(parents=True, exist_ok=True)
+        (self.tmp / 'pilot' / 'SCREEN.json').write_text(json.dumps({'decision': 'V1'}))
+        self.assertEqual([u.condition for u in rounds.plan(run)][3:],
+                         ['V1_FLAT_A', 'V1_FLAT_B', 'V1_PLANT1', 'V1_PLANT_SOLVE', None])
+        (self.tmp / 'pilot' / 'SCREEN.json').write_text(json.dumps({'decision': 'F3'}))
+        self.assertEqual([u.condition for u in rounds.plan(run)][3:], ['FLAT_B', 'PLANT1', 'PLANT_SOLVE', None])
+        (self.tmp / 'pilot' / 'SCREEN.json').write_text(json.dumps({'decision': 'BOTH'}))
+        with self.assertRaises(ValueError):
+            rounds.plan(run)
 
     def test_order(self):
         run = mkrun(self.tmp, S=4, R=4, skip_pilot=True)

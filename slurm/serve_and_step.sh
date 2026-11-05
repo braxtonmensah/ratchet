@@ -29,8 +29,16 @@ done
 PY="${RATCHET_PY:-$LIGHT/venv_vllm/bin/python}"
 cd "$CODE"
 export PYTHONPATH="$CODE${PYTHONPATH:+:$PYTHONPATH}"
-if [ -z "${RATCHET_CODE_SHA:-}" ]; then
-  RATCHET_CODE_SHA="$(git -C "$CODE" rev-parse HEAD 2>/dev/null || cat "$CODE/CODE_SHA" 2>/dev/null || echo nogit)"
+# Harness v2: the Quartz code dir is an rsync copy whose own .git is stale (it reads 09bd355), so the CODE_SHA file
+# written at sync time wins; an exported RATCHET_CODE_SHA that disagrees with it is refused (a stale launcher line).
+if [ -s "$CODE/CODE_SHA" ]; then
+  FILE_SHA="$(head -c 40 "$CODE/CODE_SHA")"
+  if [ -n "${RATCHET_CODE_SHA:-}" ] && [ "$RATCHET_CODE_SHA" != "$FILE_SHA" ]; then
+    echo "CODE_SHA_MISMATCH env=$RATCHET_CODE_SHA file=$FILE_SHA (unset RATCHET_CODE_SHA or re-sync)"; exit 6
+  fi
+  RATCHET_CODE_SHA="$FILE_SHA"
+elif [ -z "${RATCHET_CODE_SHA:-}" ]; then
+  RATCHET_CODE_SHA="$(git -C "$CODE" rev-parse HEAD 2>/dev/null || echo nogit)"
 fi
 export RATCHET_CODE_SHA
 GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"

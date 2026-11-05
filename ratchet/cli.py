@@ -69,20 +69,26 @@ def cmd_pilot(args) -> int:
     from . import arms
     run = _run(args)
     deadline = Deadline(_job_start_ts())
-    which = {'smoke': ('FLAT_A', 'FLAT_B'), 'plant': ('PLANT1',), 'all': config.PILOT_WHICH}.get(args.step, ())
-    if which:
-        client = make_client(run, args.url)
-        for w in which:
-            arms.run_pilot_round(run, w, client, deadline)
     if args.step == 'rates':
         print(json.dumps(arms.kit_of(run).pilot.step3_rates(Path(run.dir)), sort_keys=True, default=str))
-    if args.step in ('choose', 'all'):
-        if all(rounds.unit_done(run, rounds.WorkUnit('pilot', w, 'pilot', None, None, w)) for w in config.PILOT_WHICH):
-            arms.pilot_choose(run)
-        else:
-            print('PILOT_NOT_DONE (pilot rounds incomplete)')
+        return 0
+    # Pilot v2: the PLAN order (FLAT_A, FLAT_S, screen, the gate arms under the instruction the screen left, choose).
+    kinds = {'all': ('pilot', 'pilot_screen', 'pilot_choose'), 'screen': ('pilot_screen',),
+             'choose': ('pilot_choose',)}[args.step]
+    client = make_client(run, args.url) if args.step == 'all' else None
+    while True:
+        u = rounds.next_unit(run)
+        if u is None or u.kind not in ('pilot', 'pilot_screen', 'pilot_choose'):
+            return 0
+        if u.kind not in kinds:
+            print('PILOT_NOT_DONE next unit is %s' % u.key())
             return 1
-    return 0
+        run = arms.run_unit(run, u, client, deadline)
+        if not rounds.unit_done(run, u):
+            print('PILOT_NOT_DONE %s' % u.key())
+            return 1
+        if args.step != 'all':
+            return 0
 
 
 def cmd_grow(args) -> int:
@@ -253,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add('step', cmd_step, url=True)
     sp.add_argument('--no-gpu', action='store_true')
     sp = add('pilot', cmd_pilot, url=True)
-    sp.add_argument('--step', choices=('smoke', 'plant', 'rates', 'choose', 'all'), default='all')
+    sp.add_argument('--step', choices=('rates', 'screen', 'choose', 'all'), default='all')
     sp = add('grow', cmd_grow, url=True)
     sp.add_argument('--arm', required=True, choices=config.GROWTH_SAMPLING_ARMS)
     sp.add_argument('--round', type=int, default=None)

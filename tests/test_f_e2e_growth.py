@@ -111,7 +111,7 @@ class TestE2EGrowthDryRun(unittest.TestCase):
         guard.add_data_root(data)
         cls.data = data
         cls.run_dir = cls.tmp / 'runs' / 'e2e'
-        arms.init_run(cls.run_dir, S=S, R=2, skip_pilot=True, model=str(cls.tmp / 'nomodel'), exec_workers=2,
+        arms.init_run(cls.run_dir, S=S, R=2, skip_pilot=True, instruction='V1', model=str(cls.tmp / 'nomodel'), exec_workers=2,
                       pilot_n=len(TASKS), s_pilot=S)
         from ratchet import tok as tokmod
         cls.tok = tokmod.StubTokenizer()

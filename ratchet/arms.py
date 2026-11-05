@@ -138,10 +138,20 @@ def init_run(dir: Path, S: int | None = None, R: int | None = None, seed_base: i
         raise ArmError('S and R come from the pilot rule (PREREG 7); pass them only with skip_pilot (tests)')
     probe = Run(dir=dir, S=S, R=R, seed_base=seed_base, cfg=dict(cfg))
     rounds.check_test_switches(probe)
+    instr = cfg.pop('instruction', config.INSTRUCTION_DEFAULT_RUN)
+    cfg.pop('instruction_sha', None)
+    if instr not in config.INSTRUCTIONS:
+        raise ArmError('INSTRUCTION_REFUSED unknown instruction %r' % (instr,))
+    if instr != config.INSTRUCTION_DEFAULT_RUN and not cfg.get('skip_pilot'):
+        raise ArmError('INSTRUCTION_REFUSED a piloted run starts at %s; only the pilot screen may change it'
+                       % config.INSTRUCTION_DEFAULT_RUN)
     d = {'schema': config.RUN_SCHEMA, 'name': dir.name, 'S': S, 'R': R, 'seed_base': seed_base,
          'sealed_seeds': list(config.SEALED_SEEDS), 'perturb_seed': config.PERTURB_SEED,
          'model': str(config.MODEL_DIR), 'cap_tokens': config.LIBRARY_CAP_TOKENS, 'created_et': now_et(),
-         'code_git_sha': code_git_sha()}
+         'code_git_sha': code_git_sha(), 'harness': 'v2', 'max_tokens': config.MAX_TOKENS,
+         'instruction': instr, 'instruction_sha': config.INSTRUCTION_SHAS[instr],
+         'instruction_history': [{'instruction': instr, 'sha': config.INSTRUCTION_SHAS[instr], 'et': now_et(),
+                                  'why': 'init'}]}
     d.update(cfg)
     atomic_write_json(p, d)
     return load_run(dir)
@@ -164,6 +174,35 @@ def update_run(run: Run, **kv) -> Run:
     new = load_run(run.dir, kit=run.kit)
     new.job_id, new.cache = run.job_id, run.cache
     return new
+
+
+class InstructionRefused(ArmError):
+    pass
+
+
+def instruction_sha(text: str) -> str:
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def run_instruction(run: Run) -> tuple[str, str, str]:
+    """(name, text, sha256) of the instruction recorded for this run (RUN.json `instruction`, `instruction_sha`).
+    Refuses (InstructionRefused) when the run records none (a pre-v2 run), an unknown name, or a sha that is not the
+    sha of the text this code would send (AMENDMENT 2: the run refuses a hash other than the registered text's)."""
+    name = run.cfg.get('instruction')
+    rec = run.cfg.get('instruction_sha')
+    if name not in config.INSTRUCTIONS:
+        raise InstructionRefused('INSTRUCTION_REFUSED run %s records no known instruction (%r)' % (run.name, name))
+    text = config.INSTRUCTIONS[name]
+    got = instruction_sha(text)
+    if got != config.INSTRUCTION_SHAS[name] or rec != got:
+        raise InstructionRefused('INSTRUCTION_SHA_REFUSED run=%s instruction=%s in_use=%s recorded=%s registered=%s' % (
+            run.name, name, got, rec, config.INSTRUCTION_SHAS[name]))
+    return name, text, got
+
+
+def lever_instruction_line(run: Run) -> str:
+    name, _text, sha = run_instruction(run)
+    return 'LEVER INSTRUCTION sha=%s name=%s max_tokens=%d' % (sha, name, int(config.SAMPLING['max_tokens']))
 
 
 def model_sha(run: Run) -> str | None:
@@ -236,9 +275,17 @@ def model_check(run: Run) -> dict:
 
 
 def code_git_sha() -> str:
+    """RATCHET_CODE_SHA, else the CODE_SHA file beside the code (written at sync time: the Quartz code dir is an rsync
+    copy whose own .git is stale), else the repo's .git HEAD."""
     sha = os.environ.get('RATCHET_CODE_SHA')
     if sha:
         return sha
+    try:
+        f = (config.REPO_DIR / 'CODE_SHA').read_text().split()
+        if f:
+            return f[0]
+    except OSError:
+        pass
     git = config.REPO_DIR / '.git'
     try:
         head = (git / 'HEAD').read_text().strip()
@@ -400,6 +447,8 @@ class JobCounters:
     # (arm, phase) logs that already carry the NOTHINK marker. lever_check.py reads markers per server_<ARM>_* log, so a
     # once-per-job marker left every later arm of the same job LEVER_VOID (integration finding, 2026-11-04).
     think_checked: set = field(default_factory=set)
+    # (arm, phase) logs that already carry the LEVER INSTRUCTION marker (same per-log rule as NOTHINK)
+    instruction_logged: set = field(default_factory=set)
 
 
 def counters(run: Run) -> JobCounters:
@@ -420,11 +469,66 @@ def _usage_int(usage: dict, *path) -> int:
 
 def build_prompt(run: Run, spec: ReqSpec):
     kit = kit_of(run)
+    _name, text, _sha = run_instruction(run)
     if spec.inline_library is not None:
         return kit.prompt.build_messages(spec.task, kit.tok, library=spec.library, inline_library=spec.inline_library,
-                                         cap_tokens=run.cap)
+                                         cap_tokens=run.cap, instruction=text)
     return kit.prompt.build_messages(spec.task, kit.tok, library=spec.library, exemplars=spec.exemplars,
-                                     inline_noncallable=spec.inline, cap_tokens=run.cap)
+                                     inline_noncallable=spec.inline, cap_tokens=run.cap, instruction=text)
+
+
+def _check_pilot_only(run: Run, spec: ReqSpec) -> None:
+    """A PLANT_SOLVE (pilot-only) library may only reach a pilot-phase prompt on a pilot (growth) task."""
+    from .library import is_pilot_only
+    for lib in (spec.library, spec.inline_library):
+        if lib is not None and is_pilot_only(lib):
+            split = getattr(spec.task, 'split', None)
+            if spec.phase != 'pilot' or split not in ('pilot', 'growth'):
+                raise ArmError('PILOT_ONLY_LIBRARY_REFUSED %s in phase %s on split %s (%s)' % (
+                    getattr(lib, 'arm', '?'), spec.phase, split, spec.request_id))
+    if spec.exemplars:
+        for e in spec.exemplars:
+            sid = str(getattr(e, 'sample_id', '') or (e.get('sample_id') if isinstance(e, dict) else ''))
+            if sid.split('|')[0] == config.PLANT_SOLVE_ARM or '|pilot|' in sid:
+                raise ArmError('PILOT_ONLY_EXEMPLAR_REFUSED %s (%s)' % (sid, spec.request_id))
+
+
+def lever_adapter(run: Run, pending: Sequence[ReqSpec], builds: dict, log_arm: str, log_phase: str,
+                  log_round=None) -> None:
+    """PLANT_FAIL_DIAGNOSIS 4.3: before any model call, every callable library going into context is checked through
+    the sandbox's type adapter on one list-of-lists demo grid of the job's own split (the spec task's first demo input).
+    Prints one LEVER ADAPTER line per distinct library source per job and refuses (ArmError) if any grid-typed helper
+    raises on the list grid where its tuple call does not, or returns a different value."""
+    from . import adapter as _ad
+    kit = kit_of(run)
+    checked = run.cache.setdefault('adapter_checked', {})
+    for s in pending:
+        if s.library is None or s.inline:
+            continue
+        names = list(getattr(builds[s.request_id], 'helpers_in_context', ()) or ())
+        if not names:
+            continue
+        src = library_src(run, s.library, names)
+        key = (hashlib.sha256(src.encode('utf-8')).hexdigest(), log_arm, log_phase)
+        if key in checked:
+            continue
+        n_grid = len(_ad.grid_helpers(src))
+        if n_grid == 0:
+            res = {'grid_helpers': 0, 'list_smoke_ok': 0, 'ok': True, 'refused': [], 'status': 'NO_GRID_HELPERS'}
+        else:
+            fn = getattr(kit.sandbox, 'adapter_smoke', None)
+            if fn is None:
+                raise ArmError('LEVER_ADAPTER_REFUSED the sandbox has no adapter_smoke but the library has %d '
+                               'grid-typed helpers' % n_grid)
+            grid = s.task.train[0].input
+            res = fn(src, grid)
+        checked[key] = res
+        emit(run, log_arm, log_phase, _ad.lever_line(int(res['grid_helpers']), int(res['list_smoke_ok']),
+                                                     lib=key[0][:16], task=s.task.id, ok=int(bool(res['ok']))),
+             log_round)
+        if not res['ok']:
+            raise ArmError('LEVER_ADAPTER_REFUSED lib=%s task=%s status=%s error=%s refused=%s' % (
+                key[0][:16], s.task.id, res.get('status'), res.get('error'), ','.join(res.get('refused') or [])[:400]))
 
 
 def sample(run: Run, specs: Sequence[ReqSpec], samples_path: Path, client, deadline: Deadline,
@@ -438,12 +542,20 @@ def sample(run: Run, specs: Sequence[ReqSpec], samples_path: Path, client, deadl
         return True
     if client is None or not deadline.issue_ok():
         return False
+    _iname, _itext, isha = run_instruction(run)   # refuses before any model call
     by_id = {s.request_id: s for s in pending}
     builds: dict[str, Any] = {}
     reqs = []
     for s in pending:
-        pb = build_prompt(run, s)
-        builds[s.request_id] = pb
+        _check_pilot_only(run, s)
+        builds[s.request_id] = build_prompt(run, s)
+    c0 = counters(run)
+    if (log_arm, log_phase) not in c0.instruction_logged:
+        c0.instruction_logged.add((log_arm, log_phase))
+        emit(run, log_arm, log_phase, lever_instruction_line(run), log_round)
+    lever_adapter(run, pending, builds, log_arm, log_phase, log_round)
+    for s in pending:
+        pb = builds[s.request_id]
         meta = {'run': run.name, 'job_id': run.job_id, 'arm': s.arm, 'phase': s.phase, 'round': s.round,
                 'sealed_seed': s.sealed_seed, 'task': s.task.id, 'n': len(s.slots), 'seed': s.seed,
                 'library_tokens': int(getattr(pb, 'library_tokens', 0)),
@@ -477,7 +589,7 @@ def sample(run: Run, specs: Sequence[ReqSpec], samples_path: Path, client, deadl
                          'helpers_in_context': list(getattr(pb, 'helpers_in_context', ()) or ()),
                          'helpers_inline': list(getattr(pb, 'helpers_inline', ()) or ()),
                          'exemplar_ids': list(getattr(pb, 'exemplar_ids', ()) or ()),
-                         'inline': bool(s.inline), 'job_id': run.job_id})
+                         'inline': bool(s.inline), 'job_id': run.job_id, 'instruction_sha': isha})
         with lock:
             append_jsonl(samples_path, rows)
             u = res.usage or {}
@@ -1021,19 +1133,100 @@ def build_plant_arm(run: Run) -> str:
 # ---------------------------------------------------------------------------------------------------------------------
 # Pilot (PREREG 7; growth tasks only)
 
+def pilot_base(which: str) -> str:
+    """Logical arm of a physical pilot dir: V1_FLAT_A -> FLAT_A."""
+    return which[len(config.PILOT_V1_PREFIX):] if which.startswith(config.PILOT_V1_PREFIX) else which
+
+
+def pilot_expected_instruction(which: str) -> str:
+    return 'V1' if which.startswith(config.PILOT_V1_PREFIX) else config.INSTRUCTION_DEFAULT_RUN
+
+
+def flat_a_mean_gen(run: Run) -> dict:
+    """g = mean generated tokens per sample of the F3 FLAT_A pilot round (samples.jsonl gen_tokens, the model's own
+    tokenizer count; the same definition that gives v1 FLAT_A 1,451,835 tokens over 400 samples)."""
+    d = rounds.pilot_dir(run, 'FLAT_A')
+    if (load_state(d) or {}).get('state') != 'DONE':
+        raise ArmError('SCREEN_NEEDS_FLAT_A: pilot/FLAT_A is not DONE')
+    rows = list(read_rows(d / 'samples.jsonl', 'sample_id').values())
+    if not rows:
+        raise ArmError('SCREEN_NEEDS_FLAT_A: pilot/FLAT_A has no samples')
+    tot = sum(int(r.get('gen_tokens') or 0) for r in rows)
+    return {'g': tot / len(rows), 'gen_tokens': tot, 'samples': len(rows)}
+
+
+def screen_S(run: Run, n_tasks: int) -> dict:
+    """S_screen = round(SCREEN_GEN_BUDGET / (n_tasks x g)), g = F3 FLAT_A mean gen tokens per sample (VERDICT 3.5)."""
+    m = flat_a_mean_gen(run)
+    budget = int(config.SCREEN_GEN_BUDGET)
+    g = float(m['g'])
+    S = int(round(budget / (n_tasks * g))) if g > 0 else 0
+    return {'S_screen': max(1, S), 'g_flat_a': g, 'budget': budget, 'n_tasks': n_tasks,
+            'flat_a_gen_tokens': m['gen_tokens'], 'flat_a_samples': m['samples']}
+
+
+def plant_solve_libraries(run: Run, d: Path, tasks: Sequence) -> dict:
+    """Per pilot task: L_solve_<task>.json under pilot/<which>/libs (built once, then loaded and hash-checked). Refuses
+    (ArmError) if any closure's rendered callable block exceeds the cap or is not wholly in context."""
+    kit = kit_of(run)
+    ld = d / 'libs'
+    src = None
+    out, info = {}, {}
+    for t in tasks:
+        jp = ld / ('L_solve_%s.json' % t.id)
+        if not jp.exists():
+            if src is None:
+                src = kit.plant.load_arcdsl(arcdsl_dir(run))
+            lib = kit.plant.solver_library(src, t.id, kit.tok)
+            _deterministic_meta(lib, read_json(Path(run.dir) / 'RUN.json', {}).get('created_et'))
+            _text, _names, full_tok = kit.prompt.library_block(lib, 10 ** 9, kit.tok)
+            if full_tok > run.cap:
+                raise ArmError('PLANT_SOLVE_CAP_REFUSED task=%s closure=%d helpers block_tokens=%d cap=%d' % (
+                    t.id, len(lib.helpers), full_tok, run.cap))
+            kit.library.save(lib, ld, run.cap, kit.tok, stem='L_solve_%s' % t.id)
+        lib = load_library(run, jp)
+        names = [h.name for h in lib.helpers if h.in_context]
+        if set(names) != {h.name for h in lib.helpers} or config.PLANT_SOLVE_NAME not in names:
+            raise ArmError('PLANT_SOLVE_CAP_REFUSED task=%s in_context=%d of %d helpers' % (
+                t.id, len(names), len(lib.helpers)))
+        out[t.id] = lib
+        info[t.id] = {'helpers': len(lib.helpers), 'tokens': int(lib.meta.get('in_context_tokens') or 0),
+                      'sha': kit.library.sha(lib)}
+    return {'libs': out, 'info': info}
+
+
 def run_pilot_round(run: Run, which: str, client, deadline: Deadline) -> None:
-    if which not in config.PILOT_WHICH:
-        raise ArmError('pilot round %r not in %s' % (which, config.PILOT_WHICH))
+    """One pilot round (PREREG 7 as amended; harness v2). `which` is a physical pilot dir (config.PILOT_PHYSICAL):
+    FLAT_A, FLAT_B, PLANT1, PLANT_SOLVE (S = 8), the screen FLAT_S (S = S_screen, F3 only) and the V1_* fallback
+    re-runs. Every round runs under the run's recorded instruction and refuses one recorded for another instruction."""
+    if which not in config.PILOT_PHYSICAL:
+        raise ArmError('pilot round %r not in %s' % (which, config.PILOT_PHYSICAL))
     kit = kit_of(run)
     d = rounds.pilot_dir(run, which)
     st = load_state(d)
     if st.get('state') == 'DONE':
         return
+    iname, _itext, isha = run_instruction(run)
+    want = pilot_expected_instruction(which)
+    if run.cfg.get('skip_pilot') and not which.startswith(config.PILOT_V1_PREFIX):
+        rounds.check_test_switches(run)   # a test run (refused in production) may drive FLAT_A / FLAT_B under V1
+        want = iname
+    if iname != want:
+        raise InstructionRefused('PILOT_INSTRUCTION_REFUSED %s runs under %s but the run records %s' % (
+            which, want, iname))
+    if st and st.get('instruction_sha') not in (None, isha):
+        raise InstructionRefused('PILOT_INSTRUCTION_REFUSED %s was started under sha %s, run now records %s' % (
+            which, st.get('instruction_sha'), isha))
+    base = pilot_base(which)
     ids = sorted(kit.arc_io.pilot_ids(int(run.cfg.get('pilot_n', config.PILOT_N))))
     tasks = tasks_of(run, 'pilot', ids)
     S = int(run.cfg.get('s_pilot', config.S_PILOT))
-    library, lib_sha = None, None
-    if which == 'PLANT1':
+    screen = None
+    if base == config.PILOT_SCREEN:
+        screen = st.get('screen') or screen_S(run, len(tasks))
+        S = int(screen['S_screen'])
+    library, lib_sha, per_task, ps = None, None, None, None
+    if base == 'PLANT1':
         lp = d / 'L_plant_1.json'
         if not lp.exists():
             lib = _plant_tranches(run, int(run.cfg.get('pilot_r', config.PILOT_R)))[0]
@@ -1041,24 +1234,44 @@ def run_pilot_round(run: Run, which: str, client, deadline: Deadline) -> None:
             kit.library.save(lib, d, run.cap, kit.tok, stem='L_plant_1')
         library = load_library(run, lp)
         lib_sha = kit.library.sha(library)
-    seed_phase = 'pilot:FLAT_B' if which == 'FLAT_B' else 'pilot:FLAT_A'   # PLANT1 is paired with FLAT_A
+    elif base == config.PLANT_SOLVE_ARM:
+        ps = plant_solve_libraries(run, d, tasks)
+        per_task = ps['libs']
+        lib_sha = 'per_task'
+    seed_phase = {'FLAT_B': 'pilot:FLAT_B', config.PILOT_SCREEN: 'pilot:FLAT_S'}.get(base, 'pilot:FLAT_A')
+    nmax = int(config.SCREEN_MAX_N_PER_REQUEST) if base == config.PILOT_SCREEN else S
     specs = []
     for t in tasks:
-        slots = list(range(S))
-        specs.append(ReqSpec(request_id='%s|pilot|r1|%s|b0' % (which, t.id), task=t, arm=which, phase='pilot',
-                             round=1, sealed_seed=None, slots=slots,
-                             sample_ids=['%s|pilot|r1|%s|s%d' % (which, t.id, i) for i in slots],
-                             seed=seed_for(run, seed_phase, 1, t.id, 0, None), library=library))
+        lib_t = per_task[t.id] if per_task is not None else library
+        for b, lo in enumerate(range(0, S, nmax)):
+            slots = list(range(lo, min(S, lo + nmax)))
+            specs.append(ReqSpec(request_id='%s|pilot|r1|%s|b%d' % (which, t.id, b), task=t, arm=which,
+                                 phase='pilot', round=1, sealed_seed=None, slots=slots,
+                                 sample_ids=['%s|pilot|r1|%s|s%d' % (which, t.id, i) for i in slots],
+                                 seed=seed_for(run, seed_phase, 1, t.id, lo, None), library=lib_t))
     if not st:
         st = {'arm': which, 'round': 1, 'state': 'SAMPLING', 'requests_total': len(specs), 'library_out': lib_sha,
-              'started_et': now_et(), 'jobs': [], 'S_pilot': S}
+              'started_et': now_et(), 'jobs': [], 'S_pilot': S, 'instruction': iname, 'instruction_sha': isha}
+        if screen is not None:
+            st['screen'] = screen
+        if ps is not None:
+            st['plant_solve'] = ps['info']
     if run.job_id not in st['jobs']:
         st['jobs'].append(run.job_id)
     save_state(d, st)
     sp, ep = d / 'samples.jsonl', d / 'exec.jsonl'
-    if which == 'PLANT1':
+    if base == 'PLANT1':
         emit(run, which, 'pilot', 'LEVER PLANTL1 tranche=1 primitives=%d' % len(_in_context(library)), 1)
-    lever_sandbox(run, which, 'pilot', lib_sha, len(_in_context(library)) if library is not None else 0, 1)
+    if ps is not None:
+        toks = [v['tokens'] for v in ps['info'].values()]
+        emit(run, which, 'pilot', 'LEVER PLANT_SOLVE libraries=%d max_block_tokens=%d cap=%d solver=%s' % (
+            len(per_task), max(toks) if toks else 0, run.cap, config.PLANT_SOLVE_NAME), 1)
+    if screen is not None:
+        emit(run, which, 'pilot', 'LEVER SCREEN S_screen=%d g_flat_a=%.1f budget=%d' % (
+            S, float(screen['g_flat_a']), int(screen['budget'])), 1)
+    n_ctx = len(_in_context(library)) if library is not None else (
+        max(len(_in_context(v)) for v in per_task.values()) if per_task else 0)
+    lever_sandbox(run, which, 'pilot', lib_sha, n_ctx, 1)
     if not sample(run, specs, sp, client, deadline, which, 'pilot', 1):
         st.update(round_counts(sp, ep))
         save_state(d, st)
@@ -1067,10 +1280,44 @@ def run_pilot_round(run: Run, which: str, client, deadline: Deadline) -> None:
         lever_prefix(run, which, 'pilot', client, 1)
     st['state'] = 'EXECUTING'
     save_state(d, st)
-    ok = execute(run, sp, ep, {t.id: t for t in tasks}, lambda row: library, 'callable', deadline, True)
+    if per_task is not None:
+        def lib_for(row):
+            return per_task[row['task']]
+    else:
+        def lib_for(row):
+            return library
+    ok = execute(run, sp, ep, {t.id: t for t in tasks}, lib_for, 'callable', deadline, True)
     st.update(round_counts(sp, ep))
     st['state'] = 'DONE' if ok else 'EXECUTING'
     save_state(d, st)
+
+
+def pilot_screen(run: Run) -> Run:
+    """VERDICT_AMENDMENT_2 3.4, 3.5: F3 stands iff FLAT_S has >= 23 demo-pass tasks AND >= 22 pass@2 test-correct
+    tasks. Writes pilot/SCREEN.json once (never rewritten). On a failed screen the run's instruction becomes V1 at
+    max_tokens 4,096 (RUN.json instruction, instruction_sha, instruction_history); the F3 FLAT_A stays on disk."""
+    kit = kit_of(run)
+    p = Path(run.dir) / 'pilot' / 'SCREEN.json'
+    if p.exists():
+        return run
+    iname, _t, isha = run_instruction(run)
+    if iname != config.INSTRUCTION_DEFAULT_RUN:
+        raise InstructionRefused('SCREEN_REFUSED the screen runs under %s, run records %s' % (
+            config.INSTRUCTION_DEFAULT_RUN, iname))
+    res = kit.pilot.screen_decision(Path(run.dir))
+    res.update({'created_et': now_et(), 'instruction_screened': iname, 'instruction_screened_sha': isha})
+    atomic_write_json(p, res)
+    print('PILOT_SCREEN decision=%s demo_pass_tasks=%s pass2_tasks=%s S_screen=%s' % (
+        res['decision'], res['demo_pass_tasks'], res['pass2_tasks'], res.get('S_screen')), flush=True)
+    if res['decision'] == 'V1':
+        hist = list(run.cfg.get('instruction_history') or [])
+        hist.append({'instruction': 'V1', 'sha': config.INSTRUCTION_SHAS['V1'], 'et': now_et(),
+                     'why': 'F3 screen failed (pilot/SCREEN.json); fallback to the v1 instruction at max_tokens %d'
+                            % int(config.MAX_TOKENS)})
+        run = update_run(run, instruction='V1', instruction_sha=config.INSTRUCTION_SHAS['V1'],
+                         instruction_history=hist)
+    print(lever_instruction_line(run), flush=True)
+    return run
 
 
 def pilot_choose(run: Run) -> Run:
@@ -1528,6 +1775,8 @@ def run_unit(run: Run, u: WorkUnit, client, deadline: Deadline) -> Run:
     k = u.kind
     if k == 'pilot':
         run_pilot_round(run, u.condition, client, deadline)
+    elif k == 'pilot_screen':
+        run = pilot_screen(run)
     elif k == 'pilot_choose':
         run = pilot_choose(run)
     elif k == 'grow':
@@ -1582,6 +1831,9 @@ def step(run: Run, client, deadline: Deadline) -> None:
     exit_reason, state = None, 'RUNNING'
     stalls: dict[str, int] = {}
     try:
+        if first is not None and first.gpu:
+            # Truncation amendment: every job prints the instruction sha once and refuses a sha other than the run's.
+            print(lever_instruction_line(run), flush=True)
         while True:
             u = rounds.next_unit(run)
             if u is None:

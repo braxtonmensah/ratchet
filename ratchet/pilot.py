@@ -13,6 +13,14 @@ counts FLAT's extra per seed as T_STOCK / m_F = 1 + R x rho (STOCK round 1 has a
 marked ASSUMED (an upper bound) until growth measures it. With no discordance d the status is POWER_MISSING (the run
 stops: PREREG 7.3 needs power before the sealed read), and with no cached-token field in the ledger it is RATES_MISSING
 (the vLLM server needs --enable-prompt-tokens-details for the measured prefill rate).
+
+Pilot v2 (RATCHET_V2_AMENDMENTS.md AMENDMENTS 1 to 3): FLAT_A under F3, then the screen FLAT_S (screen_decision: F3
+stands iff >= 23 demo-pass tasks AND >= 22 pass@2 test-correct tasks; else the run falls back to INSTRUCTION_V1 at
+4,096 and the gate arms re-run under pilot/V1_<arm>). Step 2 is now the PLANT_SOLVE gate (demo-pass tasks >= FLAT_A + 5);
+the L_plant_1 (PLANT1) minus FLAT_A count is still computed and reported, not gating. Step 3 reads the rate arms FLAT_A,
+FLAT_B, PLANT1 under the instruction in force (as v1), fits the decode model per job (a job boundary is not an idle
+interval), and PILOT.md reports per arm the finish_reason=length share, median gen tokens, the share of samples with
+`def transform`, and the library-to-FLAT token price ratio per sample.
 """
 from __future__ import annotations
 
@@ -27,7 +35,9 @@ from typing import Callable, Mapping
 from .e_util import cfg, iter_jsonl, now_et, read_json, task_of_sample, write_json_atomic, write_text_atomic
 from .stats import clopper_pearson, power_mc
 
-PILOT_WHICH = ('FLAT_A', 'FLAT_B', 'PLANT1')
+PILOT_WHICH = tuple(cfg('PILOT_WHICH'))                 # logical gate arms: FLAT_A, FLAT_B, PLANT1, PLANT_SOLVE
+PILOT_PHYSICAL = tuple(cfg('PILOT_PHYSICAL'))           # every pilot dir a v2 run can hold
+RATE_ARMS = ('FLAT_A', 'FLAT_B', 'PLANT1')              # throughput, g, P_task and prompt rates (as v1)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -37,8 +47,25 @@ def _row_task(r: dict) -> str:
     return r.get('task') or task_of_sample(r.get('sample_id', ''))
 
 
+def screen_record(run_dir: Path) -> dict | None:
+    return read_json(Path(run_dir) / 'pilot' / 'SCREEN.json', None)
+
+
+def physical(run_dir: Path, which: str) -> str:
+    """Pilot dir of a logical gate arm: V1_<which> after a failed F3 screen, else <which>. Physical names (FLAT_S,
+    V1_*) map to themselves."""
+    sc = screen_record(run_dir) or {}
+    if which in PILOT_WHICH and sc.get('decision') == 'V1':
+        return str(cfg('PILOT_V1_PREFIX')) + which
+    return which
+
+
 def exec_rows(run_dir: Path, which: str) -> list[dict]:
-    return list(iter_jsonl(Path(run_dir) / 'pilot' / which / 'exec.jsonl'))
+    return list(iter_jsonl(Path(run_dir) / 'pilot' / physical(run_dir, which) / 'exec.jsonl'))
+
+
+def sample_rows(run_dir: Path, which: str) -> list[dict]:
+    return list(iter_jsonl(Path(run_dir) / 'pilot' / physical(run_dir, which) / 'samples.jsonl'))
 
 
 def demo_pass_tasks(rows) -> frozenset[str]:
@@ -47,7 +74,7 @@ def demo_pass_tasks(rows) -> frozenset[str]:
 
 def pilot_tasks(run_dir: Path) -> list[str]:
     ts = set()
-    for w in PILOT_WHICH:
+    for w in PILOT_PHYSICAL:
         for r in iter_jsonl(Path(run_dir) / 'pilot' / w / 'samples.jsonl'):
             ts.add(r.get('task') or task_of_sample(r.get('sample_id', '')))
     ts.discard('')
@@ -100,11 +127,78 @@ def smoke_rule(kA: int, kB: int, n: int) -> dict:
 
 
 def step2_plant(run_dir: Path) -> dict:
+    """L_plant_1 (PLANT1) minus FLAT_A demo-pass tasks. Pilot v2: computed and reported, no longer gating
+    (AMENDMENT 3); 'pass' keeps the registered +1 reading for the report."""
     kP = len(demo_pass_tasks(exec_rows(run_dir, 'PLANT1')))
     kA = len(demo_pass_tasks(exec_rows(run_dir, 'FLAT_A')))
     gain = kP - kA
     return {'k_plant1': kP, 'k_flat_a': kA, 'gain': gain, 'min_gain': int(cfg('PILOT_PLANT_MIN_GAIN')),
-            'pass': gain >= int(cfg('PILOT_PLANT_MIN_GAIN'))}
+            'pass': gain >= int(cfg('PILOT_PLANT_MIN_GAIN')), 'gates': False}
+
+
+def step2_plant_solve(run_dir: Path) -> dict:
+    """The pilot v2 gate of 7.2 (AMENDMENT 3): PLANT_SOLVE demo-pass tasks >= FLAT_A demo-pass tasks + 5."""
+    rows = exec_rows(run_dir, 'PLANT_SOLVE')
+    kS = len(demo_pass_tasks(rows))
+    kA = len(demo_pass_tasks(exec_rows(run_dir, 'FLAT_A')))
+    need = int(cfg('PILOT_PLANT_SOLVE_MIN_GAIN'))
+    name = str(cfg('PLANT_SOLVE_NAME'))
+    return {'k_plant_solve': kS, 'k_flat_a': kA, 'gain': kS - kA, 'min_gain': need, 'pass': kS - kA >= need,
+            'gates': True, 'samples': len(rows),
+            'samples_referencing_solver': sum(1 for r in rows if name in (r.get('static_refs') or [])),
+            'samples_calling_solver_on_test': sum(1 for r in rows if (r.get('helper_calls') or {}).get(name))}
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# F3 screen (VERDICT_AMENDMENT_2 3.4, 3.5; AMENDMENT 1)
+
+def demo_fit_share(rows) -> dict:
+    """Demo-pass samples whose test output is wrong (v1: 13 of 299)."""
+    dp = [r for r in rows if r.get('demo_pass')]
+    wrong = sum(1 for r in dp if not r.get('test_correct'))
+    return {'demo_pass_samples': len(dp), 'demo_pass_test_wrong': wrong, 'share': (wrong / len(dp)) if dp else None}
+
+
+def screen_decision(run_dir: Path, correct_fn: Callable[[Path, str], Mapping[str, bool]] | None = None) -> dict:
+    """F3 stands iff FLAT_S has >= 23 demo-pass tasks AND >= 22 pass@2 test-correct tasks; decision 'F3' or 'V1'."""
+    run_dir = Path(run_dir)
+    which = str(cfg('PILOT_SCREEN'))
+    d = run_dir / 'pilot' / which
+    st = read_json(d / 'round_state.json', {}) or {}
+    if st.get('state') != 'DONE':
+        raise RuntimeError('SCREEN_NOT_DONE pilot/%s state=%s' % (which, st.get('state')))
+    rows = list(iter_jsonl(d / 'exec.jsonl'))
+    samples = list(iter_jsonl(d / 'samples.jsonl'))
+    k_demo = len(demo_pass_tasks(rows))
+    p2 = (correct_fn or pass2_correct)(run_dir, which)
+    k_p2 = sum(1 for v in p2.values() if v)
+    need_d, need_p = int(cfg('SCREEN_MIN_DEMO_TASKS')), int(cfg('SCREEN_MIN_PASS2_TASKS'))
+    stands = k_demo >= need_d and k_p2 >= need_p
+    return {'decision': 'F3' if stands else 'V1', 'stands': stands, 'demo_pass_tasks': k_demo, 'pass2_tasks': k_p2,
+            'min_demo_pass_tasks': need_d, 'min_pass2_tasks': need_p, 'n_tasks': len(p2),
+            'S_screen': st.get('S_pilot'), 'screen': st.get('screen') or {}, 'samples': len(samples),
+            'gen_tokens': sum(int(r.get('gen_tokens') or 0) for r in samples),
+            'gen_tokens_budget': int(cfg('SCREEN_GEN_BUDGET')),
+            'finish_length': sum(1 for r in samples if r.get('finish_reason') == 'length'),
+            'demo_fit': demo_fit_share(rows)}
+
+
+def arm_stats(run_dir: Path, which: str) -> dict:
+    """Per pilot dir: samples, finish_reason=length share, median gen tokens, share with `def transform`, demo-pass
+    and pass@2-relevant counts, and the demo-pass-but-test-wrong share."""
+    d = Path(run_dir) / 'pilot' / which
+    s = list(iter_jsonl(d / 'samples.jsonl'))
+    e = list(iter_jsonl(d / 'exec.jsonl'))
+    gens = sorted(int(r.get('gen_tokens') or 0) for r in s)
+    n = len(s)
+    med = None
+    if gens:
+        m = n // 2
+        med = float(gens[m]) if n % 2 else (gens[m - 1] + gens[m]) / 2.0
+    return {'which': which, 'samples': n, 'length_share': (sum(1 for r in s if r.get('finish_reason') == 'length') / n)
+            if n else None, 'median_gen_tokens': med, 'mean_gen_tokens': (sum(gens) / n) if n else None,
+            'def_transform_share': (sum(1 for r in s if 'def transform' in (r.get('text') or '')) / n) if n else None,
+            'demo_pass_tasks': len(demo_pass_tasks(e)), 'demo_fit': demo_fit_share(e)}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -118,7 +212,7 @@ def fit_rates(rows: list[dict], bucket_s: int | None = None) -> dict:
     last intervals are dropped (partial). If fewer than 3 intervals remain, or the fit gives b < 0 or a <= 0, the
     fallback is b = 0, a = total generated tokens / busy seconds (method 'mean')."""
     bucket = int(cfg('PILOT_RATE_INTERVAL_S') if bucket_s is None else bucket_s)
-    spans = []
+    by_job: dict[str, list] = {}
     for r in rows:
         end = parse_ts(r)
         if end is None:
@@ -126,26 +220,30 @@ def fit_rates(rows: list[dict], bucket_s: int | None = None) -> dict:
         lat = float(r.get('latency_s') or 0.0)
         gen = float(r.get('gen_tokens') or 0)
         unc = float((r.get('prompt_tokens') or 0) - (r.get('cached_prompt_tokens') or 0))
-        spans.append((end - max(lat, 1e-6), end, gen, max(unc, 0.0)))
-    if not spans:
+        by_job.setdefault(str(r.get('job_id') or ''), []).append((end - max(lat, 1e-6), end, gen, max(unc, 0.0)))
+    if not by_job:
         return {'a': None, 'b': None, 'method': 'none', 'intervals': 0, 'busy_s': 0.0}
-    t0 = min(s[0] for s in spans)
-    t1 = max(s[1] for s in spans)
-    busy = max(t1 - t0, 1e-6)
-    nb = max(1, int(math.ceil(busy / bucket)))
-    G = [0.0] * nb
-    P = [0.0] * nb
-    for s, e, gen, unc in spans:
-        P[min(nb - 1, int((s - t0) // bucket))] += unc
-        dur = e - s
-        for i in range(int((s - t0) // bucket), min(nb - 1, int((e - t0) // bucket)) + 1):
-            lo, hi = t0 + i * bucket, t0 + (i + 1) * bucket
-            ov = max(0.0, min(hi, e) - max(lo, s))
-            G[i] += gen * ov / dur
-    xs = [p / bucket for p in P[1:-1]]
-    ys = [g / bucket for g in G[1:-1]]
-    tot_gen = sum(s[2] for s in spans)
-    res = {'intervals': len(xs), 'busy_s': busy, 'gen_tokens': tot_gen, 'bucket_s': bucket}
+    # Harness v2: one busy span per job (a pilot may span jobs; the gap between jobs is not an idle interval).
+    xs, ys, busy, tot_gen = [], [], 0.0, 0.0
+    for spans in by_job.values():
+        t0 = min(s[0] for s in spans)
+        t1 = max(s[1] for s in spans)
+        busy_j = max(t1 - t0, 1e-6)
+        nb = max(1, int(math.ceil(busy_j / bucket)))
+        G = [0.0] * nb
+        P = [0.0] * nb
+        for s, e, gen, unc in spans:
+            P[min(nb - 1, int((s - t0) // bucket))] += unc
+            dur = e - s
+            for i in range(int((s - t0) // bucket), min(nb - 1, int((e - t0) // bucket)) + 1):
+                lo, hi = t0 + i * bucket, t0 + (i + 1) * bucket
+                ov = max(0.0, min(hi, e) - max(lo, s))
+                G[i] += gen * ov / dur
+        xs += [p / bucket for p in P[1:-1]]
+        ys += [g / bucket for g in G[1:-1]]
+        busy += busy_j
+        tot_gen += sum(s[2] for s in spans)
+    res = {'intervals': len(xs), 'busy_s': busy, 'gen_tokens': tot_gen, 'bucket_s': bucket, 'jobs': len(by_job)}
     if len(xs) >= 3:
         mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
         sxx = sum((x - mx) ** 2 for x in xs)
@@ -186,7 +284,7 @@ def exec_seconds_per_sample(run_dir: Path) -> dict:
     if runs > 0:
         return {'s_per_sample': ex_s / runs, 'source': 'job_status', 'runs': int(runs), 'exec_s': ex_s}
     tot = n = 0
-    for w in PILOT_WHICH:
+    for w in PILOT_PHYSICAL:
         for r in iter_jsonl(Path(run_dir) / 'pilot' / w / 'exec.jsonl'):
             tot += sum(float(x) for x in (r.get('wall_s') or []))
             n += 1
@@ -208,7 +306,7 @@ def pass2_correct(run_dir: Path, which: str) -> dict[str, bool]:
     from .select import pass2, candidate_from_exec
     from .types import ExecResult
     from . import arc_io
-    d = Path(run_dir) / 'pilot' / which
+    d = Path(run_dir) / 'pilot' / physical(run_dir, which)
     code_len = {r['sample_id']: len(r.get('code') or '') for r in iter_jsonl(d / 'samples.jsonl')}
     by: dict[str, list] = {}
     for r in iter_jsonl(d / 'exec.jsonl'):
@@ -231,7 +329,8 @@ def discordance(ca: Mapping[str, bool], cb: Mapping[str, bool], tasks=None) -> d
 
 
 def step3_rates(run_dir: Path, correct_fn: Callable[[Path, str], Mapping[str, bool]] | None = None) -> dict:
-    rows = ledger_rows(run_dir, 'pilot')
+    rate_arms = {physical(run_dir, a) for a in RATE_ARMS}
+    rows = [r for r in ledger_rows(run_dir, 'pilot') if r.get('arm') is None or r.get('arm') in rate_arms]
     fit = fit_rates(rows)
     flat = [r for r in rows if not (r.get('library_tokens') or 0) and not (r.get('exemplar_tokens') or 0)]
     lib = [r for r in rows if (r.get('library_tokens') or 0)]
@@ -252,7 +351,17 @@ def step3_rates(run_dir: Path, correct_fn: Callable[[Path, str], Mapping[str, bo
         dd = {'n': 0, 'discordant': None, 'd': None, 'error': f'{type(e).__name__}: {e}'}
     st = startup_seconds(run_dir)
     ex = exec_seconds_per_sample(run_dir)
-    return {'a': fit.get('a'), 'b': fit.get('b'), 'fit': fit, 'startup_s': st, 'cached_known_rows': cached_known,
+
+    def per_sample(rs):
+        v = [float(r.get('prompt_tokens') or 0) + float(r.get('gen_tokens') or 0) / max(1, int(r.get('n') or 1))
+             for r in rs]
+        return _mean(v)
+    ps_flat, ps_lib = per_sample(flat), per_sample(lib)
+    L = float(cfg('LIBRARY_CAP_TOKENS'))
+    price = {'flat_logical_per_sample': ps_flat, 'library_logical_per_sample': ps_lib,
+             'measured_ratio': (ps_lib / ps_flat) if (ps_flat and ps_lib) else None,
+             'cap_ratio': ((p_task + L + g) / (p_task + g)) if (p_task is not None and g is not None) else None}
+    return {'price': price, 'rate_arms': sorted(rate_arms), 'a': fit.get('a'), 'b': fit.get('b'), 'fit': fit, 'startup_s': st, 'cached_known_rows': cached_known,
             'exec_s_per_sample': ex.get('s_per_sample'), 'exec': ex,
             'startup_measured': st is not None, 'g': g, 'P_task': p_task, 'u_flat_req': u_flat, 'u_lib_req': u_lib,
             'library_tokens_plant1': lib_tok, 'L': int(cfg('LIBRARY_CAP_TOKENS')), 'requests': len(rows),
@@ -357,8 +466,11 @@ def choose_SR(rates: dict, power_sims: int | None = None) -> dict:
 
 def run_pilot_rules(run_dir: Path, correct_fn=None, power_sims: int | None = None) -> dict:
     s1 = step1_smoke(run_dir)
-    s2 = step2_plant(run_dir)
+    s2 = step2_plant_solve(run_dir)          # pilot v2: the PLANT_SOLVE gate (AMENDMENT 3)
+    s2_plant1 = step2_plant(run_dir)         # registered L_plant_1 check: report-only
     rates = step3_rates(run_dir, correct_fn)
+    screen = screen_record(run_dir)
+    arms = {w: arm_stats(run_dir, w) for w in PILOT_PHYSICAL if (Path(run_dir) / 'pilot' / w).is_dir()}
     status = 'OK'
     choice = None
     if not s1['pass']:
@@ -371,7 +483,9 @@ def run_pilot_rules(run_dir: Path, correct_fn=None, power_sims: int | None = Non
     elif status == 'OK':
         choice = choose_SR(rates, power_sims)
         status = choice['status']
-    return {'schema': 'ratchet.pilot.v1', 'created_et': now_et(), 'status': status, 'smoke': s1, 'plant': s2,
+    return {'schema': 'ratchet.pilot.v2', 'created_et': now_et(), 'status': status, 'smoke': s1, 'plant': s2,
+            'plant1': s2_plant1, 'screen': screen, 'arms': arms,
+            'gate_dirs': {w: physical(run_dir, w) for w in PILOT_WHICH},
             'rates': rates, 'choice': choice,
             'S': choice.get('S') if choice else None, 'R': choice.get('R') if choice else None,
             'underpowered': choice.get('underpowered') if choice else None}
@@ -395,10 +509,46 @@ def render_pilot_md(res: dict) -> str:
          f'FLAT_A demo-pass tasks {s1["kA"]} of {s1["n"]}, CP95 [{s1["cp95_A"][0]:.4f}, {s1["cp95_A"][1]:.4f}]; '
          f'FLAT_B {s1["kB"]} of {s1["n"]}, CP95 [{s1["cp95_B"][0]:.4f}, {s1["cp95_B"][1]:.4f}]. '
          f'Pass: {s1["pass"]}.', '',
-         '## 7.2 PLANT round-1 check', '',
-         f'PLANT1 demo-pass tasks {s2["k_plant1"]}, FLAT_A {s2["k_flat_a"]}, gain {s2["gain"]} '
-         f'(needs >= {s2["min_gain"]}). Pass: {s2["pass"]}.', '',
-         '## 7.3 Throughput and discordance', '',
+         '## 7.2 PLANT checks (as amended: AMENDMENT 3)', '']
+    if 'k_plant_solve' in s2:
+        L += [f'Gate, PLANT_SOLVE: demo-pass tasks {s2["k_plant_solve"]}, FLAT_A {s2["k_flat_a"]}, gain {s2["gain"]} '
+              f'(needs >= {s2["min_gain"]}). Pass: {s2["pass"]}. Samples referencing solve_this '
+              f'{s2.get("samples_referencing_solver")} of {s2.get("samples")}; calling it on a test input '
+              f'{s2.get("samples_calling_solver_on_test")}.', '']
+    p1 = res.get('plant1') or (s2 if 'k_plant1' in s2 else None)
+    if p1:
+        L += [f'Report only, L_plant_1 (PLANT1): demo-pass tasks {p1["k_plant1"]}, FLAT_A {p1["k_flat_a"]}, gain '
+              f'{p1["gain"]} (the registered +{p1["min_gain"]} rule reads {p1["pass"]}; it no longer gates).', '']
+    sc = res.get('screen')
+    if sc:
+        df = sc.get('demo_fit') or {}
+        L += ['## F3 screen (AMENDMENT 1)', '',
+              f'FLAT_S at S_screen = {sc.get("S_screen")} (g of the F3 FLAT_A = {_fmt((sc.get("screen") or {}).get("g_flat_a"), 1)}; '
+              f'{_fmt(sc.get("gen_tokens"))} generated tokens against the {_fmt(sc.get("gen_tokens_budget"))} budget): '
+              f'demo-pass tasks {sc.get("demo_pass_tasks")} (needs >= {sc.get("min_demo_pass_tasks")}), pass@2 '
+              f'test-correct tasks {sc.get("pass2_tasks")} (needs >= {sc.get("min_pass2_tasks")}). Demo-pass but '
+              f'test-wrong samples: {df.get("demo_pass_test_wrong")} of {df.get("demo_pass_samples")} (v1: 13 of 299). '
+              f'Decision: **{sc.get("decision")}**' + (' (F3 stands).' if sc.get('decision') == 'F3' else
+                                                        ' (fallback: INSTRUCTION_V1 at max_tokens 4,096; the F3 '
+                                                        'FLAT_A stays on disk, reported below, not used for gates).'),
+              '']
+    arms = res.get('arms') or {}
+    if arms:
+        gd = res.get('gate_dirs') or {}
+        L += ['## Per pilot dir', '', f'Gate dirs: {", ".join("%s=%s" % kv for kv in sorted(gd.items()))}.', '',
+              '| dir | samples | finish=length share | median gen tokens | mean gen tokens | share with `def transform` '
+              '| demo-pass tasks | demo-pass test-wrong |', '|---|---|---|---|---|---|---|---|']
+        for w, a in arms.items():
+            df = a.get('demo_fit') or {}
+            L.append(f'| {w} | {a["samples"]} | {_fmt(a.get("length_share"), 4)} | {_fmt(a.get("median_gen_tokens"), 1)} '
+                     f'| {_fmt(a.get("mean_gen_tokens"), 1)} | {_fmt(a.get("def_transform_share"), 4)} | '
+                     f'{a.get("demo_pass_tasks")} | {df.get("demo_pass_test_wrong")} of {df.get("demo_pass_samples")} |')
+        L.append('')
+    pr = r.get('price') or {}
+    L += ['## 7.3 Throughput and discordance', '',
+          f'- library-to-FLAT token price per sample: measured {_fmt(pr.get("measured_ratio"), 3)} (PLANT1 '
+          f'{_fmt(pr.get("library_logical_per_sample"), 1)} vs FLAT {_fmt(pr.get("flat_logical_per_sample"), 1)} '
+          f'logical tokens per sample); at the 6,000 cap {_fmt(pr.get("cap_ratio"), 3)} (v1: 2.26)',
          f'- decode fit: a = {_fmt(r.get("a"))} gen tok/s, b = {_fmt(r.get("b"), 5)} '
          f'(method {r["fit"].get("method")}, {r["fit"].get("intervals")} intervals of {r["fit"].get("bucket_s")} s, '
          f'busy {_fmt(r["fit"].get("busy_s"), 1)} s)',

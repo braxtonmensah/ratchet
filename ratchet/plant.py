@@ -38,6 +38,7 @@ class PlantSource:
     solver_calls: dict[str, set[str]]
     entries: dict[str, str] = field(default_factory=dict)   # constant / type alias name -> one-definition source
     commit: str | None = None
+    solvers_src: str = ''                                     # solvers.py text (PLANT_SOLVE pilot control only)
 
 
 def _string_annotations(fn: ast.FunctionDef) -> ast.FunctionDef:
@@ -147,7 +148,7 @@ def load_arcdsl(dir: Path) -> PlantSource:
                 if isinstance(sub, ast.Name) and sub.id in prims:
                     calls[sub.id].add(m.group(1))
     return PlantSource(primitives=prims, constants_src=const_src, types_src=types_src, deps=deps, solver_calls=calls,
-                       entries=entries, commit=_git_commit(d))
+                       entries=entries, commit=_git_commit(d), solvers_src=solv_src)
 
 
 def _full_library(src: PlantSource, tok, arm: str) -> Library:
@@ -198,3 +199,122 @@ def build_tranches(src: PlantSource, R: int, cap_tokens: int, tok, arm: str = 'P
                             'capped_primitives': len(prim_order), 'n_primitives_total': len(src.primitives)})
         libs.append(lib)
     return libs
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# PLANT_SOLVE (pilot-only plumbing control; PLANT_FAIL_DIAGNOSIS 4.5, F5). For one pilot task, the callable library is
+# arc-dsl's own verified solver for that task, renamed solve_this(grid: 'Grid') -> 'Grid' with the registered docstring,
+# plus its primitive and constant dependency closure. It is rendered and executed exactly like every library arm (same
+# header, legend, adapter and cap). The Library carries meta pilot_only=True and arm PLANT_SOLVE; library.save,
+# freeze and the drivers refuse it anywhere but pilot/ (tests/test_v2_pilot.py).
+
+class PlantSolveError(ValueError):
+    pass
+
+
+class _Rename(ast.NodeTransformer):
+    def __init__(self, old: str, new: str):
+        self.old, self.new = old, new
+
+    def visit_Name(self, node: ast.Name):
+        if node.id == self.old:
+            return ast.copy_location(ast.Name(id=self.new, ctx=node.ctx), node)
+        return node
+
+
+def solver_source(src: PlantSource, task_id: str) -> str:
+    """Source of solve_<task_id> renamed to solve_this(grid: 'Grid') -> 'Grid' with the registered docstring."""
+    from ratchet import config as _config
+    if not src.solvers_src:
+        raise PlantSolveError('solvers.py source missing from PlantSource')
+    fn = None
+    for node in ast.parse(src.solvers_src).body:
+        if isinstance(node, ast.FunctionDef) and node.name == 'solve_' + task_id:
+            fn = node
+    if fn is None:
+        raise PlantSolveError('no arc-dsl solver for task %s' % task_id)
+    a = fn.args
+    if len(a.posonlyargs) + len(a.args) != 1 or a.vararg or a.kwarg or a.kwonlyargs:
+        raise PlantSolveError('solver %s does not take exactly one grid argument' % fn.name)
+    old = a.args[0].arg
+    new = 'grid'
+    if any(isinstance(n, ast.Name) and n.id == new for n in ast.walk(fn)) or any(
+            isinstance(n, ast.arg) and n.arg == new for n in ast.walk(fn)):
+        raise PlantSolveError('solver %s already uses the name %r' % (fn.name, new))
+    body = list(fn.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], 'value', None), ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:]
+    body = [_Rename(old, new).visit(b) for b in body]
+    doc = ast.Expr(ast.Constant(_config.PLANT_SOLVE_DOCSTRING))
+    out = ast.FunctionDef(name=_config.PLANT_SOLVE_NAME,
+                          args=ast.arguments(posonlyargs=[], args=[ast.arg(new, ast.Constant('Grid'))], vararg=None,
+                                             kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
+                          body=[doc] + body, decorator_list=[], returns=ast.Constant('Grid'), type_comment=None,
+                          **({'type_params': []} if 'type_params' in ast.FunctionDef._fields else {}))
+    mod = ast.Module(body=[out], type_ignores=[])
+    ast.fix_missing_locations(mod)
+    return ast.unparse(mod) + '\n'
+
+
+def solver_library(src: PlantSource, task_id: str, tok, arm: str = 'PLANT_SOLVE') -> Library:
+    """Library = solve_this plus its dependency closure (primitives, constants). Caller checks the 6,000 cap."""
+    import copy
+
+    s = solver_source(src, task_id)
+    full = _full_library(src, tok, arm)
+    by = full.by_name()
+    const_entries, _ = _assign_entries(src.constants_src, False)
+    type_entries, typing_imports = _assign_entries(src.types_src, True)
+    extra: dict[str, Helper] = {}
+
+    def need_entry(name: str) -> None:
+        if name in by or name in extra:
+            return
+        esrc = const_entries.get(name) or type_entries.get(name)
+        if esrc is None:
+            raise PlantSolveError('solver %s reads unknown name %s' % (task_id, name))
+        node = ast.parse(esrc).body[0]
+        names = sorted({n.id for n in ast.walk(node.value) if isinstance(n, ast.Name)})
+        imps = [typing_imports[n] for n in names if n in typing_imports]
+        dd = [n for n in names if n in const_entries or n in type_entries]
+        full_src = ('\n'.join(imps) + '\n' if imps else '') + esrc
+        extra[name] = Helper(name=name, hash=sha256_text(full_src), source=full_src, canonical=full_src,
+                             token_len=count_tokens(full_src, tok), deps=dd, first_round=None, accepted_by='plant',
+                             calling_tasks=[], n_calling_tasks=0, n_solutions=0, mdl_gain=0, verified=True,
+                             provenance={'source': 'arc-dsl', 'kind': 'definition', 'commit': src.commit})
+        for d in dd:
+            need_entry(d)
+
+    deps = set()
+    for f in free_names_of(s) - {'solve_this'}:
+        if f in src.primitives or f in by:
+            deps.add(f)
+        elif f in const_entries or f in type_entries:
+            deps.add(f)
+            need_entry(f)
+        elif f in _BUILTINS:
+            continue
+        else:
+            raise PlantSolveError('solver %s reads unknown name %s' % (task_id, f))
+    try:
+        canon, h = canonicalize(s, None)
+    except (SyntaxError, ValueError):
+        canon, h = s, sha256_text(s)
+    from ratchet import config as _config
+    top = Helper(name=_config.PLANT_SOLVE_NAME, hash=h, source=s, canonical=canon, token_len=count_tokens(s, tok),
+                 deps=sorted(deps), first_round=1, accepted_by='plant_solve', calling_tasks=[task_id],
+                 n_calling_tasks=1, n_solutions=1, mdl_gain=0, verified=True,
+                 provenance={'source': 'arc-dsl', 'kind': 'solver', 'task': task_id, 'commit': src.commit,
+                             'pilot_only': True})
+    pool = Library(arm=arm, round=1, helpers=list(full.helpers) + list(extra.values()) + [top], parent_sha=None, meta={})
+    closure = dep_closure(pool, [top.name])
+    pby = pool.by_name()
+    helpers = [copy.deepcopy(pby[n]) for n in closure]
+    have = set(closure)
+    missing = sorted({d for h in helpers for d in h.deps if d not in have})
+    if missing:
+        raise PlantSolveError('solver %s closure misses %s' % (task_id, missing))
+    return Library(arm=arm, round=1, helpers=helpers, parent_sha=None,
+                   meta={'arcdsl_commit': src.commit, 'pilot_only': True, 'task': task_id,
+                         'primitives': sum(1 for n in closure if n in src.primitives)})

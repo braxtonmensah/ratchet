@@ -1,0 +1,37 @@
+- AMENDMENT 1 (2026-11-04 HH:MM ET, after pilot v1 job 12678501 read PLANT_FAIL, before any growth job and any sealed read):
+  truncation fix. Pilot v1 truncated 897 of 1,200 samples at max 4,096 generated tokens (74.75%); 754 (62.83%) reached the
+  sandbox with no code and held 3,084,977 of 4,336,292 generated tokens (71.14%); stopped samples spent a median 1,466 to 1,473
+  tokens of prose before the code. For every arm, phase, round and seed, config.INSTRUCTION gains, appended after its last
+  sentence, exactly: "State the rule in at most three sentences, then give the code block. Do not trace the grids cell by
+  cell; your program is run on every example for you." (INSTRUCTION_F3, sha256 <f3>; v1 text INSTRUCTION_V1, sha256 <v1>).
+  Sampling stays as section 3 (max 4,096). Pilot order: FLAT_A under F3, then one growth-only screen round FLAT_S on the same
+  50 pilot tasks with S = round(1,451,835 / (50 x g)), g = that FLAT_A's mean generated tokens per sample. F3 stands iff FLAT_S
+  has at least 23 demo-pass tasks AND at least 22 pass@2 test-correct tasks (means of v1 FLAT_A 24 / FLAT_B 22 and 23 / 21);
+  the demo-pass-but-test-wrong share is reported (v1: 13 of 299). If F3 stands, FLAT_B, PLANT1 and PLANT_SOLVE run under F3;
+  otherwise INSTRUCTION_V1 at max 4,096 is restored for the whole run and FLAT_A, FLAT_B, PLANT1 and PLANT_SOLVE run under it.
+  Screen samples are phase pilot and never feed a library, exemplar, SHAM or helper ranking. Nothing in v1 shows F3 keeps
+  accuracy on hard tasks; the screen is the only evidence. The FLAT-TTC rule of section 4 is unchanged; at g near 500 a
+  library sample costs about 4.6x a FLAT sample instead of 2.26x, which makes COMPOUNDS harder; RESULT.md reports the measured
+  ratio, and the section 8 prediction, made at the v1 operating point, is left unchanged. Every job prints LEVER INSTRUCTION
+  sha=<sha256> and refuses a hash other than the one recorded for the run.
+- AMENDMENT 2 (2026-11-04 HH:MM ET, same conditions): harness fix under section 7. In v1, 8 of the 13 grid-taking arc-dsl
+  primitives in L_plant_1 (mostcolor, objects with without_bg, palette, numcolors, width, height, shape, underfill) raised on the
+  list-of-lists grid that transform receives, because arc-dsl dispatches on tuple type; 41 of the 43 PLANT1 ERROR samples were
+  this crash, and replaying them through the fix below makes 24 pass their demos. For every library arm, phase, round and seed,
+  the library now executes in its own namespace and each helper reaches the program through an adapter that reads only the
+  helper's own annotations: an argument at a parameter annotated Grid, Element or Piece that is a list of rows is passed as a
+  tuple of tuples, and a tuple-of-tuples result of a function so annotated is returned as a list of lists; unannotated helpers
+  pass through unchanged. Helper call counting is unchanged. The callable library header gains, exactly: "Pass grids exactly as
+  transform receives them; these functions accept and return grids as lists of lists of ints." A type legend listing only the
+  arc-dsl type names that appear in the rendered helpers' annotations is prepended to the library block and counts against the
+  6,000-token cap. The library note is placed before the instruction's final sentence. Each job prints LEVER ADAPTER
+  grid_helpers=<n> list_smoke_ok=<n> and refuses to start if any grid-typed helper raises on a list-of-lists demo grid.
+  Section 7 is re-run in full in a fresh run directory (runs/v2); v1's PILOT_STOP.json stays in place.
+- AMENDMENT 3 (2026-11-04 HH:MM ET, same conditions): section 7.2 gate. A plumbing control PLANT_SOLVE gates the pilot: on the
+  same 50 pilot tasks at S = 8, each task's callable library holds arc-dsl's own solver for that task, renamed solve_this with
+  docstring "returns the output grid for this puzzle", plus its primitive closure (at most <maxtok> tokens, under the 6,000 cap),
+  rendered and executed exactly as every library arm. It passes iff its demo-pass tasks are at least FLAT_A's plus 5 (2 noise
+  SDs at the measured v1 discordance d = 0.12). The L_plant_1 (PLANT1) check is still run and reported in PILOT.md but no longer
+  gates: no Hodel solver of a FLAT-unsolved pilot task fits inside any primitive library under the 6,000-token cap (0 of 24),
+  and its +1 rule passes with probability 22/64 = 0.34 under no effect. PLANT_SOLVE is pilot-only: it never enters a growth
+  round, a library or a sealed read. PLANT-DRIP, PLANT-L1 and the VOID rule of section 6 are unchanged.

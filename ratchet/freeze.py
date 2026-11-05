@@ -8,6 +8,7 @@ which is the lead gate in the PLAN.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 from . import config, rounds
@@ -30,6 +31,14 @@ def _entry(run, json_rel: str | None, py_rel: str | None) -> dict:
     if not json_rel:
         raise FreezeRefused('missing library file')
     d = Path(run.dir)
+    if Path(json_rel).parts[:1] == ('pilot',) or config.PLANT_SOLVE_ARM in Path(json_rel).parts:
+        raise FreezeRefused('PILOT_ONLY_LIBRARY_REFUSED %s (PLANT_SOLVE and pilot libraries never freeze)' % json_rel)
+    try:
+        doc = json.loads((d / json_rel).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        doc = {}
+    if isinstance(doc, dict) and (doc.get('arm') == config.PLANT_SOLVE_ARM or (doc.get('extra') or {}).get('pilot_only')):
+        raise FreezeRefused('PILOT_ONLY_LIBRARY_REFUSED %s (PLANT_SOLVE and pilot libraries never freeze)' % json_rel)
     e = {'json': json_rel, 'py': py_rel, 'sha256_json': sha256_file(d / json_rel),
          'sha256_py': sha256_file(d / py_rel) if py_rel else None}
     return e

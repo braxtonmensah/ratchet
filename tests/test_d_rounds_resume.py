@@ -291,14 +291,28 @@ class TestPilotPlan(unittest.TestCase):
         d = self.tmp / 'p'
         arms.init_run(d, model='/fake/model', s_pilot=3, pilot_n=4)
         run = arms.load_run(d, kit=kit)
-        self.assertEqual([u.kind for u in rounds.plan(run)], ['pilot'] * 3 + ['pilot_choose'])
+        self.assertEqual([u.kind for u in rounds.plan(run)], ['pilot', 'pilot', 'pilot_screen'])
         run.job_id = 'jP'
         client = F.FakeClient(d, 'jP')
         dl = Deadline(0.0, clock=lambda: 0.0)
         # stop the step after the pilot by letting growth hit a CPU-only boundary: run one step with a client
         arms.run_unit(run, rounds.WorkUnit('pilot', 'FLAT_A', 'pilot', None, None, 'FLAT_A'), client, dl)
+        with mock.patch.object(config, 'SCREEN_GEN_BUDGET', 4 * 5 * 30):
+            arms.run_unit(run, rounds.WorkUnit('pilot', 'FLAT_S', 'pilot', None, None, 'FLAT_S'), client, dl)
+        run = arms.run_unit(run, rounds.WorkUnit('pilot_screen'), client, dl)
+        self.assertEqual([u.condition for u in rounds.plan(run)][3:], ['FLAT_B', 'PLANT1', 'PLANT_SOLVE', None])
         arms.run_unit(run, rounds.WorkUnit('pilot', 'FLAT_B', 'pilot', None, None, 'FLAT_B'), client, dl)
         arms.run_unit(run, rounds.WorkUnit('pilot', 'PLANT1', 'pilot', None, None, 'PLANT1'), client, dl)
+        arms.run_unit(run, rounds.WorkUnit('pilot', 'PLANT_SOLVE', 'pilot', None, None, 'PLANT_SOLVE'), client, dl)
+        ps = rounds.read_rows(d / 'pilot' / 'PLANT_SOLVE' / 'samples.jsonl', 'sample_id')
+        self.assertEqual(len(ps), 4 * 3)
+        self.assertTrue(all(r['helpers_in_context'] == ['p0', 'solve_this'] for r in ps.values()))
+        self.assertTrue(all(r['instruction_sha'] == config.INSTRUCTION_F3_SHA256 for r in ps.values()))
+        st = rounds.load_state(d / 'pilot' / 'FLAT_S')
+        self.assertGreaterEqual(st['S_pilot'], 1)
+        self.assertEqual(len(rounds.read_rows(d / 'pilot' / 'FLAT_S' / 'samples.jsonl', 'sample_id')),
+                         4 * st['S_pilot'])
+        self.assertEqual(set(kit.prompt.instructions_seen), {config.INSTRUCTION_F3})
         a = rounds.read_rows(d / 'pilot' / 'FLAT_A' / 'samples.jsonl', 'sample_id')
         self.assertEqual(len(a), 4 * 3)
         ex = rounds.read_rows(d / 'pilot' / 'FLAT_A' / 'exec.jsonl', 'sample_id')

@@ -158,6 +158,7 @@ class TestReport(unittest.TestCase):
             write_jsonl(run / 'pilot/FLAT_A/exec.jsonl', exec_rows('FLAT_A', 20))
             write_jsonl(run / 'pilot/FLAT_B/exec.jsonl', exec_rows('FLAT_B', 21))
             write_jsonl(run / 'pilot/PLANT1/exec.jsonl', exec_rows('PLANT1', 25))
+            write_jsonl(run / 'pilot/PLANT_SOLVE/exec.jsonl', exec_rows('PLANT_SOLVE', 25))   # gate: >= FLAT_A + 5
             t0 = dt.datetime(2026, 11, 5, 10, 0, 0)
             write_jsonl(run / 'ledger/ledger_1.jsonl', [
                 {'request_id': f'r{i}', 'phase': 'pilot', 'ts_et': (t0 + dt.timedelta(seconds=5 * i)).strftime(

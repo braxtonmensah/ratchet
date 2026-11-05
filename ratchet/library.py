@@ -15,7 +15,8 @@ from typing import Sequence
 from ratchet.c_util import atomic_write_text, canonical_json, count_tokens, sha256_text
 
 SCHEMA = 'ratchet.library.v1'
-CALLABLE_HEADER = 'These functions are already defined; call them directly.'
+CALLABLE_HEADER = ('These functions are already defined; call them directly. Pass grids exactly as transform receives them; '
+                   'these functions accept and return grids as lists of lists of ints.')   # fallback only (prompt.py rules)
 _TOP_META = ('created_et', 'tokenizer_sha', 'cap_tokens', 'in_context_tokens', 'n_in_context')
 
 
@@ -71,6 +72,23 @@ class Library:
     def hashes(self) -> dict[str, str]:
         """name -> canonical hash; pass this as `library_names` to helpers.extract_helpers / build_solution."""
         return {h.name: h.hash for h in self.helpers}
+
+
+PILOT_ONLY_ARMS = ('PLANT_SOLVE',)
+
+
+def is_pilot_only(lib) -> bool:
+    """A PLANT_SOLVE library (pilot plumbing control): never a growth library, exemplar, SHAM source or sealed arm."""
+    if lib is None:
+        return False
+    meta = getattr(lib, 'meta', None) or {}
+    return getattr(lib, 'arm', None) in PILOT_ONLY_ARMS or bool(meta.get('pilot_only')) or any(
+        is_pilot_only_helper(h) for h in getattr(lib, 'helpers', []) or [])
+
+
+def is_pilot_only_helper(h) -> bool:
+    prov = getattr(h, 'provenance', None) or {}
+    return bool(prov.get('pilot_only')) or getattr(h, 'accepted_by', None) == 'plant_solve'
 
 
 def empty(arm: str) -> Library:
@@ -200,6 +218,8 @@ def merge(prev: Library, accepted: Sequence[Helper], round: int, sols: Sequence)
     an existing helper join its calling_tasks."""
     from ratchet.helpers import _check_growth, dedup_solutions
 
+    if is_pilot_only(prev) or any(is_pilot_only_helper(a) for a in accepted):
+        raise ValueError('PILOT_ONLY_LIBRARY_REFUSED merge: a PLANT_SOLVE library or helper never enters a growth library')
     _check_growth(sols)
     helpers = [copy.deepcopy(h) for h in prev.helpers]
     for h in helpers:
@@ -248,6 +268,8 @@ def save(lib: Library, dir: Path, cap_tokens: int, tok, stem: str | None = None)
     Mutates `lib` so that sha(lib) afterwards equals the returned sha."""
     dir = Path(dir)
     stem = stem or f'L_{lib.round}'
+    if is_pilot_only(lib) and 'pilot' not in dir.parts:
+        raise ValueError(f'PILOT_ONLY_LIBRARY_REFUSED {lib.arm} save into {dir} (PLANT_SOLVE lives under pilot/ only)')
     _assign_ranks(lib)
     _, names, ntok = in_context(lib, cap_tokens, tok)
     names = set(names)

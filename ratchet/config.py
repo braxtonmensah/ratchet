@@ -77,7 +77,17 @@ GROWTH_SAMPLING_ARMS = ('STOCK', 'STATIC', 'ONESHOT', 'EXEMPLAR')               
 SHARED_ROUND1_ARMS = ('STATIC', 'EXEMPLAR')                                               # SPEC 13 I3
 PERTURBED_ARMS = ('STOCK', 'FLATTTC')                                                     # PREREG 6.4
 FLAT_ARM = 'FLATTTC'
-PILOT_WHICH = ('FLAT_A', 'FLAT_B', 'PLANT1')
+# Pilot v2 (PLANT_FAIL_DIAGNOSIS 4.5, VERDICT_AMENDMENT_2 3.4 and 3.5). PILOT_WHICH are the logical gate arms; their
+# directories are pilot/<which> when the F3 screen stands, pilot/V1_<which> after the fallback (the F3 FLAT_A stays on
+# disk under pilot/FLAT_A, reported, not used for gates). FLAT_S is the token-matched screen round (F3 only).
+PILOT_WHICH = ('FLAT_A', 'FLAT_B', 'PLANT1', 'PLANT_SOLVE')
+PILOT_SCREEN = 'FLAT_S'
+PILOT_V1_PREFIX = 'V1_'
+PILOT_PHYSICAL = ('FLAT_A', 'FLAT_S', 'FLAT_B', 'PLANT1', 'PLANT_SOLVE',
+                  'V1_FLAT_A', 'V1_FLAT_B', 'V1_PLANT1', 'V1_PLANT_SOLVE')
+PILOT_AFTER_SCREEN = {'F3': ('FLAT_B', 'PLANT1', 'PLANT_SOLVE'),
+                      'V1': ('V1_FLAT_A', 'V1_FLAT_B', 'V1_PLANT1', 'V1_PLANT_SOLVE')}
+PLANT_SOLVE_ARM = 'PLANT_SOLVE'   # pilot-only plumbing control: never a growth library, exemplar, SHAM source or sealed arm
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Library, acceptance, SHAM, EXEMPLAR, PLANT (PREREG 4; SPEC 13 I5 to I8, I17)
@@ -181,12 +191,42 @@ SYSTEM_PROMPT = (
     'You solve ARC puzzles by writing Python. Each puzzle shows input and output grids of digits 0 to 9. '
     'Find the rule that maps every input to its output and write it as a function.'
 )
-INSTRUCTION = (
+INSTRUCTION_V1 = (
     'Write a Python function `def transform(grid):` that takes the input grid as a list of lists of ints and returns '
     'the output grid as a list of lists of ints (values 0 to 9, at most 30 by 30). It must produce the correct output '
     'for every example above and for the test input. You may import math, itertools, collections, functools, copy, '
     'typing and numpy. Return one ```python fenced block containing the complete program.'
 )
+# The module default stays the v1 text: selfft and any caller that passes no instruction get v1 bytes (harness v2 note).
+INSTRUCTION = INSTRUCTION_V1
+# Amendment 2 (F3) with VERDICT_AMENDMENT_2 changes: the v1 text with, appended after its last sentence, exactly this.
+INSTRUCTION_F3_SUFFIX = ('State the rule in at most three sentences, then give the code block. Do not trace the grids '
+                         'cell by cell; your program is run on every example for you.')
+INSTRUCTION_F3 = INSTRUCTION_V1 + ' ' + INSTRUCTION_F3_SUFFIX
+# Registered hashes (sha256 of the UTF-8 text). config refuses to import if a text drifts from its hash.
+INSTRUCTION_V1_SHA256 = 'cf85bc1b0ccc002e3bc93edd9e8285e41c35b28f022d517f85c011e4c7d22340'
+INSTRUCTION_F3_SHA256 = '3c511b3f1db6cf3a8a1c32d499137dd0210a19bf7026937ea7cb540e7db2191e'
+INSTRUCTIONS = {'V1': INSTRUCTION_V1, 'F3': INSTRUCTION_F3}
+INSTRUCTION_SHAS = {'V1': INSTRUCTION_V1_SHA256, 'F3': INSTRUCTION_F3_SHA256}
+# The closing sentence(s) of each instruction: a library or exemplar note goes immediately BEFORE this tail, so the last
+# thing the model reads is the instruction's own last sentence (PLANT_FAIL_DIAGNOSIS 4.2). For F3 the tail is the whole
+# appended F3 text, so the registered sentences stay contiguous.
+INSTRUCTION_TAILS = {'V1': 'Return one ```python fenced block containing the complete program.',
+                     'F3': INSTRUCTION_F3_SUFFIX}
+# Instruction a new run starts with (pilot v2 screens F3 first; the screen may set the run to V1, never back).
+INSTRUCTION_DEFAULT_RUN = 'F3'
+
+
+def _instruction_sha(text: str) -> str:
+    import hashlib
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+for _k, _t in INSTRUCTIONS.items():
+    if _instruction_sha(_t) != INSTRUCTION_SHAS[_k]:
+        raise RuntimeError('INSTRUCTION_%s text does not match its registered sha256' % _k)
+    if not _t.endswith(INSTRUCTION_TAILS[_k]):
+        raise RuntimeError('INSTRUCTION_%s does not end with its tail' % _k)
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Builder sections: A, B, C and E append constants below this line.
@@ -215,7 +255,34 @@ LLM_RETRIES = 2
 LLM_RETRY_SLEEP_S = 2.0
 LLM_READY_POLL_S = 2.0
 LLM_RESULT_WAIT_S = 0.5
-LIB_HEADER_CALLABLE = 'These functions are already defined; call them directly.'
+# Harness v2 (PLANT_FAIL_DIAGNOSIS 4.2, F2): one grid-contract sentence for every callable library arm.
+LIB_HEADER_CALLABLE_V1 = 'These functions are already defined; call them directly.'
+LIB_GRID_CONTRACT = ('Pass grids exactly as transform receives them; these functions accept and return grids as lists of '
+                     'lists of ints.')
+LIB_HEADER_CALLABLE = LIB_HEADER_CALLABLE_V1 + ' ' + LIB_GRID_CONTRACT
+# Type adapter (F1): parameters and results annotated with one of these names are grids at the program boundary.
+ADAPTER_GRID_TYPES = ('Grid', 'Element', 'Piece')
+# Type legend (F2): one comment line per arc-dsl alias (arc_types.py at ARCDSL_COMMIT) that names a rendered helper's
+# annotation, in this order, written for the model's view (grids are lists of lists through the adapter). Names that
+# are not arc-dsl aliases never produce a line, so unannotated (grown) libraries get an empty legend.
+TYPE_LEGEND = (
+    ('Boolean', 'bool'),
+    ('Integer', 'int'),
+    ('IntegerTuple', '(int, int) pair'),
+    ('Numerical', 'int or (int, int) pair'),
+    ('IntegerSet', 'frozenset of ints'),
+    ('Grid', 'list of lists of ints (rows)'),
+    ('Cell', '(value, (i, j))'),
+    ('Object', 'frozenset of (value, (i, j)) cells'),
+    ('Objects', 'frozenset of Object'),
+    ('Indices', 'frozenset of (i, j)'),
+    ('IndicesSet', 'frozenset of Indices'),
+    ('Patch', 'Object or Indices'),
+    ('Element', 'Object or Grid'),
+    ('Piece', 'Grid or Patch'),
+    ('TupleTuple', 'tuple of tuples'),
+    ('ContainerContainer', 'container of containers'),
+)
 LIB_HEADER_INLINE = 'Reference code. These functions are NOT defined in your environment; copy any code you need.'
 LIB_NOTE_CALLABLE = 'The library functions above are already defined in your environment; you may call them.'
 LIB_NOTE_INLINE = 'The reference code above is not defined in your environment; copy any part you use.'
@@ -229,5 +296,13 @@ HASH_NAME_LEN = 12
 SHAM_GENRE_BIN = 25
 SHAM_SWAP_ITERS = 2000
 # Builder E (pilot, verdict)
-PILOT_PLANT_MIN_GAIN = 1
+PILOT_PLANT_MIN_GAIN = 1            # L_plant_1 vs FLAT_A: still computed, report-only in pilot v2
+# Pilot v2 gates and screen (PLANT_FAIL_DIAGNOSIS 4.5; VERDICT_AMENDMENT_2 3.2, 3.4, 3.5)
+PILOT_PLANT_SOLVE_MIN_GAIN = 5      # PLANT_SOLVE demo-pass tasks >= FLAT_A demo-pass tasks + 5 gates the pilot
+SCREEN_GEN_BUDGET = 1_451_835       # v1 FLAT_A generated tokens; S_screen = round(budget / (n_tasks x g_FLAT_A))
+SCREEN_MIN_DEMO_TASKS = 23          # mean of v1 FLAT_A 24 and FLAT_B 22
+SCREEN_MIN_PASS2_TASKS = 22         # mean of v1 pass@2 test-correct 23 and 21
+SCREEN_MAX_N_PER_REQUEST = 16       # screen samples per request (vLLM n); a task's S_screen is split into such requests
+PLANT_SOLVE_DOCSTRING = 'returns the output grid for this puzzle'
+PLANT_SOLVE_NAME = 'solve_this'
 COMPARATORS = ('STATIC', 'ONESHOT', 'EXEMPLAR', 'SHAM', 'FLATTTC')

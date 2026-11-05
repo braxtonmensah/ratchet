@@ -499,11 +499,44 @@ def _append_global_read(key: Path, row: dict) -> None:
         os.chmod(p, 0o000)
 
 
-def _amendment_registered(amendment: str) -> bool:
+KEY_GRANT_PHRASE = 'grants one key access'
+
+
+def amendment_paragraph(prereg_text: str, amendment: str) -> str | None:
+    """The paragraph of `- AMENDMENT <id> (` under `## AMENDMENTS`, up to the next `- AMENDMENT ` or the end of the
+    file, whitespace collapsed (so a phrase wrapped across lines still reads as one); None if there is no such line."""
+    import re
+    if not amendment or not re.fullmatch(r'[0-9A-Za-z._-]+', str(amendment)):
+        return None
+    _head, sep, amend = prereg_text.partition('## AMENDMENTS')
+    if not sep:
+        return None
+    flat = ' '.join(amend.split())
+    start = flat.find(f'- AMENDMENT {amendment} (')
+    if start < 0:
+        return None
+    nxt = flat.find('- AMENDMENT ', start + 1)
+    return flat[start: nxt if nxt >= 0 else len(flat)]
+
+
+def amendment_key_grant(prereg_text: str, amendment: str) -> str:
+    """'OK' iff amendment <id>'s own paragraph contains the exact phrase KEY_GRANT_PHRASE; else 'NOT_IN_PREREG' or
+    'GRANTS_NO_KEY_ACCESS'. Review fix 2026-11-04: any `AMENDMENT <id> ` text used to authorise a repeated key read, so
+    every harness amendment (truncation, adapter, PLANT_SOLVE gate) would have minted a re-read token."""
+    para = amendment_paragraph(prereg_text, amendment)
+    if para is None:
+        return 'NOT_IN_PREREG'
+    return 'OK' if KEY_GRANT_PHRASE in para else 'GRANTS_NO_KEY_ACCESS'
+
+
+def _amendment_status(amendment: str) -> str:
     prereg = guard.expected_score_path()
     text = Path(os.path.dirname(prereg), 'PREREG.md').read_text(encoding='utf-8')
-    head, _, amend = text.partition('## AMENDMENTS')
-    return bool(amendment) and f'AMENDMENT {amendment} ' in amend.replace('\n', ' ')
+    return amendment_key_grant(text, amendment)
+
+
+def _amendment_registered(amendment: str) -> bool:
+    return _amendment_status(amendment) == 'OK'
 
 
 def _read_outputs(condition: str, argv: list[str], pf: dict, freeze_sha: str, submit_sha: str,
@@ -531,9 +564,13 @@ def _read_outputs(condition: str, argv: list[str], pf: dict, freeze_sha: str, su
                                    '(PREREG 2: once per frozen library; a re-read needs --amendment <id>)')
             if amendment in used:
                 raise ScoreRefused(f'AMENDMENT_ALREADY_USED {amendment}')
-            if not _amendment_registered(amendment):
-                raise ScoreRefused(f'AMENDMENT_NOT_IN_PREREG {amendment} (PREREG.md AMENDMENTS has no "AMENDMENT '
-                                   f'{amendment} ")')
+            ast_ = _amendment_status(amendment)
+            if ast_ == 'NOT_IN_PREREG':
+                raise ScoreRefused(f'AMENDMENT_NOT_IN_PREREG {amendment} (PREREG.md AMENDMENTS has no "- AMENDMENT '
+                                   f'{amendment} (" line)')
+            if ast_ != 'OK':
+                raise ScoreRefused(f'AMENDMENT_GRANTS_NO_KEY_ACCESS {amendment} (its paragraph lacks the exact phrase '
+                                   f'"{KEY_GRANT_PHRASE}")')
         files = sorted(p for p in os.listdir(sub) if p.endswith('.json'))
         row = {'ts_et': now_et(), 'condition': condition, 'freeze_sha': freeze_sha, 'submit_sha': submit_sha,
                'n_files': len(files), 'key_root': str(key), 'run': str(run_dir), 'amendment': amendment,

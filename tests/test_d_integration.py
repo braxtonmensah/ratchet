@@ -124,7 +124,7 @@ class TestIntegrationReal(unittest.TestCase):
         from test_c_sham_exemplar_plant import write_dsl
         write_dsl(dsl)
         cls.run_dir = cls.tmp / 'runs' / 'v1'
-        arms.init_run(cls.run_dir, S=2, R=2, skip_pilot=True, auto_ack=True, model=str(cls.tmp / 'nomodel'),
+        arms.init_run(cls.run_dir, S=2, R=2, skip_pilot=True, instruction='V1', auto_ack=True, model=str(cls.tmp / 'nomodel'),
                       arcdsl_dir=str(dsl), exec_workers=4)
         from ratchet import tok as tokmod
         cls.tok = tokmod.StubTokenizer()

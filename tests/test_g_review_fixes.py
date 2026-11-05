@@ -178,12 +178,34 @@ class TestScoreGuards(unittest.TestCase):
         shutil.rmtree(v1b / 'scores')
         r = self.score(run=v1b, extra=['--amendment', '99'])
         self.assertIn('AMENDMENT_NOT_IN_PREREG', r.stderr)
-        r = self.score(run=v1b, extra=['--amendment', '0'])     # PREREG.md carries "AMENDMENT 0 "
-        self.assertEqual(r.returncode, 0, r.stderr)
+        # Review fix (harness v2): PREREG.md carries "- AMENDMENT 0 (", but its paragraph does not say it grants one
+        # key access, so it authorises nothing.
+        r = self.score(run=v1b, extra=['--amendment', '0'])
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn('AMENDMENT_GRANTS_NO_KEY_ACCESS', r.stderr)
+        # A code tree whose PREREG has a granting amendment: passes once, then AMENDMENT_ALREADY_USED.
+        code = self.root / 'code'
+        code.mkdir()
+        for name in ('score_sealed.py', 'PREREG.md'):
+            shutil.copy(S.REPO / name, code / name)
+        for name in ('ratchet', 'splits'):
+            shutil.copytree(S.REPO / name, code / name, ignore=shutil.ignore_patterns('__pycache__'))
+        with open(code / 'PREREG.md', 'a', encoding='utf-8') as f:
+            f.write('- AMENDMENT 7 (2026-11-05 10:00 ET, test fixture): the primary read failed; this amendment grants one\n'
+                    '  key access for the primary condition.\n')
+
+        def score_in(tree, run):
+            env = dict(os.environ, RATCHET_KEY_ROOT=str(self.key), PYTHONPATH=str(tree))
+            args = ['score', '--test', '--run', str(run), '--condition', 'primary', '--freeze-sha', self.fsha,
+                    '--submit-sha', self.ssha, '--amendment', '7']
+            return subprocess.run([S.PY, str(tree / 'score_sealed.py')] + args, capture_output=True, text=True,
+                                  env=env, timeout=300, cwd=str(tree))
+        r = score_in(code, v1b)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         v1c = self.run.parent / 'v1c'
         shutil.copytree(self.run, v1c)
         shutil.rmtree(v1c / 'scores')
-        self.assertIn('AMENDMENT_ALREADY_USED', self.score(run=v1c, extra=['--amendment', '0']).stderr)
+        self.assertIn('AMENDMENT_ALREADY_USED', score_in(code, v1c).stderr)
 
     def test_key_override_needs_test_flag(self):
         r = self.score(test_flag=False)
@@ -293,7 +315,7 @@ class TestPilotRule(unittest.TestCase):
                      'ts_et': (t0 + dt.timedelta(seconds=5 * i)).strftime('%Y-%m-%d %H:%M:%S')} for i in range(40)]
             (run / 'ledger').mkdir()
             (run / 'ledger' / 'ledger_1.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
-            for w, k in (('FLAT_A', 20), ('FLAT_B', 20), ('PLANT1', 25)):
+            for w, k in (('FLAT_A', 20), ('FLAT_B', 20), ('PLANT1', 25), ('PLANT_SOLVE', 25)):
                 (run / 'pilot' / w).mkdir(parents=True)
                 (run / 'pilot' / w / 'exec.jsonl').write_text(''.join(
                     json.dumps({'sample_id': f'{w}|pilot|r1|t{i:02d}|s0', 'demo_pass': i < k}) + '\n' for i in range(50)))
