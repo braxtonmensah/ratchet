@@ -60,3 +60,15 @@ FORECAST_0128_EXT_1105.json (sha256 bab5cac8...): per seed, the law fitted on ro
 Exploratory. The model is phenomenological (geometric per-step success, power laws in N and d50) and fitted on 11 rounds. The
 calibration factor between the geometric and logistic d50 scales (1.49-1.61) is fitted, not derived. MEAS depths stop at 10, so a
 forecast above about 8 would hit the ruler's ceiling.
+
+## Addendum 18:59 ET: reinvesting saved search does not cross the line (GATE_REINVEST_1105.md, written before the read; reinvest.py 9c5c8913)
+Cost per verified solve c_t = total exec / solves, per pool, vs d50; beta = -(slope of ln c on ln d50); under a fixed execution budget,
+rows per round would scale as d50^(gamma + beta).
+| seed | frontier beta (se) | data-pool beta (se) | alpha (1 + gamma + beta_dp) |
+|---|---|---|---|
+| FRONTIER_s2 | -0.402 (0.396) | +1.182 (0.202) | 0.570 |
+| FRONTIER_s3 | -0.300 (0.394) | +0.949 (0.208) | 0.487 |
+| FRONTIER_s4 | +0.284 (0.464) | +1.288 (0.235) | 0.758 |
+**GATE_REINVEST: NO_HELP.** At the frontier, cost per solve does not fall (the window moves with the model, so its tasks stay equally
+hard). Below the frontier it falls (amortisation), but even spending all of that saving on more rows leaves alpha (1 + gamma + beta)
+at 0.49-0.76, under 1. Reinvestment alone cannot make this loop accelerate; alpha (learning per row) has to rise.
