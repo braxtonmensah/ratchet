@@ -226,3 +226,39 @@ mean gain of 0.26 d50 per round, linear growth alone saturates it near round 25.
 - Noise: at 6 tasks per depth, d50_deep noise is about 0.34 to 0.44. The re-sim gives power 0.85 to 0.95 and a false-positive rate
   of 0.05 to 0.062. Per point 3, the alpha is lowered to hold the false-positive rate at <= 0.05 at the measured noise, if needed;
   the critical value is printed with the read.
+
+## AMENDMENT A4 REGISTERED (2026-11-05 13:44 ET), after the verifier's GO (ext/VERDICT_A4_0128.md, 13:42 ET) and before any round-11 reading exists
+
+At registration, seed 1 is training round 11 (relaunched 13:20 with t_to 30; its first round-11 line is due about 13:55 to 14:15 ET).
+Seeds 2, 3 and 4 are at rounds 8, 7 and 7. No policy has been scored on any deep pool (ext/deep/ does not exist). The A4 DRAFT
+text above holds, with these final values replacing the draft's where they differ:
+- **Rulers.** Per-seed deep rulers, each seed scored only on its own pool. All are depths 1..20, 6 per depth, beam B 4, max_steps 20.
+  The shared 39000 pool is SUPERSEDED and never read.
+
+  | seed (FRONTIER and GUIDE) | pool | sha256 |
+  |---|---|---|
+  | s1 | MEAS_DEEP_39100 | 34a86653937aed6634df58ad604ab044796cbb0552c11c20e1db3afe3ea00cb4 |
+  | s2 | MEAS_DEEP_39200 | 0beed047690137cc238fa41da7c1d016b725d3f0cf603cf40e652fd05e283e55 |
+  | s3 | MEAS_DEEP_39300 | c5d9f77e02f44e3d4d4478ff1667049a00991ba950a50d7648633c7935c06d5f |
+  | s4 | MEAS_DEEP_39400 | 5e9a9184c6a6a1b8c53b8dffeb9eee568792905712d30878e264ec85afda5fca |
+
+  Each pool has 0 overlap with the others, with MEAS 29000 and with every data and frontier pool for t = 0..30 (ext/overlap_deep_k.py).
+- **Test L.** delta_k = OLS slope of d50_deep over rounds 11..R*_k, minus the slope over 0..10.
+  - R*_k = the first round whose data-pool summary.d50 is >= 9, or the last round run, whichever comes first.
+  - A seed with fewer than 5 late rounds is excluded. If fewer than 3 seeds remain, the label is UNDERPOWERED-EXT.
+  - t across seeds, df K - 1; LATE-TAKEOFF-SHAPE iff t > 2.605 (exact false-positive rate 0.040 under t(3)).
+- **Power** (ext/sim_late_takeoff_v2.json, md5 f69144a0; per-seed pools; measured task correlation; gains capped near d50 10-11).
+  The false-positive rate is 0.035 to 0.039. Power, for m = 1.05 / 1.1 / 1.2:
+  - takeoff at round 10: 0.48 / 0.79 / 0.83;
+  - takeoff at round 15: 0.16 / 0.31 / 0.45;
+  - takeoff at round 20: 0.06 / 0.10 / 0.17.
+  So this extension can only see a takeoff that starts near round 10. A later one sits behind the loop's own ceiling and is the
+  question for silicyte-0129 / 0130, not for A4.
+- **Continuation.**
+  - Seed 1: `run_seed.sh 1 30`.
+  - Seeds 2 to 4: an in-holder waiter step (VERDICT_A4_0128.md, "SAFE form"). It runs ext/continue_k.sh --dry
+    (md5 9754093a) and ext/extend_0128.py pre --apply (md5 635d26e2), then execs run_bootseed0128.sh FRONTIER k 30.
+  - `extend_0128.py post` must print POST OK: the redone round-10 MEAS rows equal the archived ones, else VOID for that seed's
+    extension.
+- **Reader.** ext/read_0128_ext.py (md5 953d97be). The A1 R = 10 read uses rounds 0..10 only.
+- **Labels and prediction.** As in the A4 draft: P(LATE-TAKEOFF) 0.10, most likely NO-TAKEOFF-BY-R.
