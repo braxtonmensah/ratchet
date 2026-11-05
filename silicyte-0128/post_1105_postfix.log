@@ -1,0 +1,15 @@
+=== FRONTIER_s2 postfix
+OK   redone round 10 MEAS fixed_rows equal the archived scored-only rows (300 rows; same P_10, deterministic beam)
+OK   round 10 trained (own_new present, P_11 written)
+POST OK
+INFO P_11 dir present for FRONTIER_s2
+=== FRONTIER_s3 postfix
+OK   redone round 10 MEAS fixed_rows equal the archived scored-only rows (300 rows; same P_10, deterministic beam)
+OK   round 10 trained (own_new present, P_11 written)
+POST OK
+INFO P_11 dir present for FRONTIER_s3
+=== FRONTIER_s4 postfix
+OK   redone round 10 MEAS fixed_rows equal the archived scored-only rows (300 rows; same P_10, deterministic beam)
+OK   round 10 trained (own_new present, P_11 written)
+POST OK
+INFO P_11 dir present for FRONTIER_s4
