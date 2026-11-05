@@ -1,0 +1,71 @@
+# SELFMOD_FIXES (silicyte-0130): one line per item of VERDICT_SELFMOD0130.md, applied 2026-11-05 14:4x ET, CPU only, no jobs
+
+- S1 full GPU-smoke command: done. code/gpu_smoke.sh does the env, PYTHONPATH and version print, runs U1 to U4, then one SMOKE gen with the warm edit forced. Launch form (srun --jobid --overlap) is in its header and BUILD sec. 3.
+- S2 real warm-start proof: done.
+  - selfmod.propose honours SMOKE_FORCE_EDIT for any backend; the forced sample is excluded from the parse stats.
+  - smtrain.warm_check_before asserts trainable > 0, that every saved A_{t-1} tensor equals the live one (maxdiff 0) and that it requires grad.
+  - smtrain.warm_check_after asserts the adapter changed and logs cos(B, B_prev).
+  - The result is stored in train_done.json and in the lineage.
+  - Stub smoke: gen 1 model candidate warm_from = gen_0/cand_0/A.
+- S3 peft per-module / per-layer and heterogeneous Scorer: done. code/gpu_unit.py:
+  - U1: fresh mlp_in / ends / r8; asserts adapter_config target_modules, layers_to_transform, and saved-tensor layers and modules.
+  - U2: warm from P_0.
+  - U3: ident.Scorer with {U1, P_0} in both orders vs single-adapter logps, maxdiff < 1e-2.
+- S4 save failed proposer outputs: done.
+  - Every completion goes to gen_g/proposer_samples.jsonl (text, parse, valid, reason); 4 to 5 lines per gen in the stub smoke.
+  - gpu_unit U4 is a 32-sample probe with A_0 and 32 with the adapter disabled, with Wilson CIs, saved to proposer_probe.jsonl.
+- F1 (E2) float or bool for a knob: done (knobs.check_value / validate_edit).
+  - Choice knobs need the exact type of a listed value; integral floats are coerced to int for int knobs and int choices, so {"beam": 8.0} becomes the int 8.
+  - Non-integral floats and strings are rejected; bools are rejected for every non-bool knob.
+  - smoke_parts: beam 8.0 -> int 8; rank 32.5, alpha_ratio True and beam "8" rejected.
+- F2 (E1) format-width bomb: done.
+  - ast.Mod (and Mult, Pow) disallowed; string constants capped at 64 chars.
+  - The probe runs in a child python -I under RLIMIT_AS 1 GB, RLIMIT_CPU 10 s and a 15 s wall limit, and fails closed.
+  - Train-time evaluation has a 120 s SIGALRM limit and fails closed.
+  - smoke_parts: "%0999999999d" % 0 rejected; an 80-char constant rejected.
+- F3 (E5) starving filter: done.
+  - The probe has no "meta" rows.
+  - At training time, a filter keeping < 20% of the candidate's real rows, a runtime error or a timeout refuses the candidate (no training, no SELECT, delta None, ineligible).
+  - The incumbent's filter is reset to "True" instead, and the reset is logged.
+  - Stub smoke gen 2: REFUSED filter_keeps_0.100_of_real_rows.
+- F4 dead knobs: done.
+  - archive_window and prop_temp are split off the model edit and applied at commit whatever the decision (lineage prop_set).
+  - Random edits never pick them; a proposer-only edit uses its slot without a round.
+  - A candidate whose run_key + torch seed equals cand 0's reuses cand 0 (same_as_inc, delta 0).
+  - Stub smoke gen 3: prop_set applied, next config archive_window 32.
+- F5 no-retry seed drop: done. run_selfmod.sh retries a failed gen once after a 60 s pause, drops a seed only on exit 9 or after 2 failures, and logs why.
+- F6 integrity: done.
+  - The 8 sha256s and the opengen md5 are hardcoded in smcore (RULER_SHA, OPENGEN_MD5_PIN) and checked against those constants; the json files must agree.
+  - chmod a-w applied to frozen/*.json and *.sha256 (r--r--r-- at 14:47 ET).
+- F7 VOID never computed: done. read_selfmod.py computes:
+  - ruler shas vs the hardcoded values;
+  - OVERLAP_OK in smoke/overlap_check_G30.log (running since 14:48 ET as a nice'd login process, not a job);
+  - opengen_md5 in every lineage gen vs the pin;
+  - gen-0 inc_adapter_md5 vs wsum(P_0).
+  - It also computes PROPOSER-WEAK by both rules.
+- F8 REPORT in the live log: done. The REPORT pass writes report/*.json and report/report_stdout.log, and only the point count is echoed. PREREG sec. 2: no amendment after the first REPORT write may change selection, knobs, margin or the proposer.
+- P1 EXPLORATORY: done.
+  - PREREG retitled, sec. 0: no compounding claim and no COMPOUNDS / LINEAR-GROWTH / NULL labels.
+  - Descriptive reads: knob trajectories, planted-knob recovery (SABOTAGE) and gain per GPU-hour vs the 0128 FRONTIER seeds.
+  - Under the null, SELFMOD trails the fixed recipe 90% of the time (93% at 40 h), and an edit must add about 3.3x the base gain to break even.
+- P2 tel cost model: done. PREREG sec. 7 uses the verifier's 4b model and table; "triples" became "3.0x to 3.3x (break-even +0.40 to +0.45 d50 per round)".
+- P3 timeline: done. About 10 gens per holder life (ending about Nov 7 13:00 ET); UNDERPOWERED only for a start after about Nov 10 02:00; P(UNDERPOWERED) 0.10; renewal by Nov 7 12:00; MATCHED H* depends on the control's hours.
+- P4 VOID wording: done. "REPORT used other than as an input-exclusion set" (smcore.all_ruler_ins).
+- P5 recency text: done. recency N keeps gens gg >= g - N plus this round's rows plus seed256.
+- P6 sabotage positive control: done.
+  - selfmod.py arm SABOTAGE (C_0 + keep_filter 'row["src"] != "own"'), 2 seeds; read REVERTED-ALL; priority over BESTOF for a third GPU.
+  - Stub smoke: gen 0 ran with the planted filter.
+- Verifier 3(b), one-round greedy undervalues multi-round knobs: not fixed (no budget for multi-round evaluation). Stated in PREREG sec. 7 with the 0.44 vs 0.64 sim.
+- Verifier 1(d), objective mismatch: REPORT AUC is reported beside REPORT d50 as the matching read (PREREG sec. 2, sec. 6).
+
+## Launch blockers (coordinator, after the GPU smoke PASSED on 12688122.4, g50, 14:58 to 15:35 ET)
+
+- B1 G30 overlap: the 14:48 run was killed (smoke.sh: "Killed") after the ruler, MEAS / MEAS_DEEP, 0128 data-pool (37,200) and 0128 actual-frontier (32 files, 6,400) checks, all 0, and before the SELFMOD practice-pool section, which held about 136k tasks in memory. overlap_check.py (d) is now streamed per pool, with exclusion ON at G 30. Restarted 16:36 ET; RSS 110 MB; the old log is kept as overlap_check_G30_killed_1448.log. The streamed run was killed again at about 25 CPU-min (the login reaper; RSS only 127 MB), after seeds 1 to 3 (102,300 tasks, all 0). overlap_check.py gained OVL_RESUME, which re-reads (a) to (c) and the finished seeds from the killed log (overlap_check_G30_part_k1to3_killed.log) and computes only the rest. Seed 4: 17:11 to 17:18 ET. Final, in smoke/overlap_check_G30.log: 136,400 practice tasks, 0 tid / 0 same task / 0 shared input; OVERLAP_OK.
+- B2 SABOTAGE read: fixed. A seed reads REVERTED only when an accepted edit replaced the planted filter (before any reset); RESET when it was lost only through the automatic F3 incumbent filter reset; else HELD. The lineage now records filter_reset per candidate. test_sabotage_read.py, with synthetic lineages: REVERTED / RESET / HELD read correctly, giving "not REVERTED-ALL". SABOTAGE_READ_OK.
+- B3 15 s probe limit on g50: NOT exercised. No proposal in the smoke touched keep_filter (0 of 5 gen-0 samples, 0 of 64 U4 probe samples), so the filter child never ran on the compute node. Added preflight_probe.py, about 11 s, run by run_selfmod.sh before the first generation (exit 9 refuses the launch):
+  - L1: a CPU-hog child is killed by RLIMIT_CPU;
+  - L2: a 2 GB allocation fails under RLIMIT_AS;
+  - L3: a normal filter passes;
+  - L4: the format bomb fails closed.
+  - Login node 16:3x ET: PREFLIGHT_PROBE_OK, with L1 killed at 10.05 s (rc -9) and L2 rc 1.
+- PREREG sec. 0: "5x" corrected to "6x".
