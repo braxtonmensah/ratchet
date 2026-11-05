@@ -163,3 +163,17 @@ frozen library on the 400 sealed tasks needs one GPU and the public ARC-AGI-1 da
   are re-chosen from the rates PILOT.json recorded; no pilot arm is re-sampled; the pre-amendment PILOT.json, PILOT.md,
   PILOT_CHOICE.json and PILOT_STOP.json are kept under archived names. Nothing else in sections 1 to 10 or in AMENDMENTS 0
   to 3 changes, and this amendment grants no access to any sealed key.
+
+- AMENDMENT 5 (2026-11-05 07:44 ET; after run v2 growth and the A5 smoke, before any sealed read). It applies parts A and C
+  of AMENDMENT_5_DRAFT.md. The part C decision rule was pushed at 06:46:35 ET (f59281e), before the smoke job was submitted
+  (07:14:34) or started (07:27:12).
+  (a) Run v2 is WITHDRAWN_PRE_SEAL, for the reasons in GROWTH_V2_DIAGNOSIS.md: STOCK, ONE-SHOT and SHAM are empty. Its
+  FREEZE.json is never acked, and no v2 row is sealed-sampled or scored. This is not a VOID attempt.
+  (b) The smoke (job 12686909) results:
+      - P0: A 0, H 0.019, D 19.
+      - P1 (prefill): A 0, H 0.000, D 22.
+      - P2 (prefill + helper sentence): A 0, H 0.268, D 20.
+      No variant meets A >= 5, so there is no run v3.
+  (c) Outcome: LIBRARY_CANNOT_FORM. silicyte-0119 ends without a sealed read, and the 400 sealed tasks were never opened.
+  Per section 9, Silicyte drops in-context library compounding, as registered (exact canonical-hash acceptance), for this
+  model and budget. Result: RESULT_0119_PRESEAL.md.
