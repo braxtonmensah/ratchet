@@ -148,3 +148,18 @@ frozen library on the 400 sealed tasks needs one GPU and the public ARC-AGI-1 da
   gates: no Hodel solver of a FLAT-unsolved pilot task fits inside any primitive library under the 6,000-token cap (0 of 24),
   and its +1 rule passes with probability 22/64 = 0.34 under no effect. PLANT_SOLVE is pilot-only: it never enters a growth
   round, a library or a sealed read. PLANT-DRIP, PLANT-L1 and the VOID rule of section 6 are unchanged.
+- AMENDMENT 4 (2026-11-05 00:40 ET, after pilot v2 read PILOT_NO_FEASIBLE_SR, before any growth job and any sealed read):
+  section 7.3 budget. The 12 H100-hours of section 7.3 become 48 H100-hours, for every arm, phase, round and seed. Basis:
+  measured supply, about 170 H100-hours reachable by 2026-11-10, of which another study (silicyte-0128) needs about 47
+  (91 with its exploratory GUIDE arm) on h100-single holders, not on the h100-debug slot this run uses; the number is set
+  before any growth job and does not depend on any growth or sealed result. It was set after the pilot's projection was
+  read; every budget from 41 to 54 H100-hours gives the same choice, S = 4 and R = 4. Pilot v2
+  (runs/v2, PILOT.md written 2026-11-05 00:08 ET, code 43b97f7) read: 7.1 determinism PASS (FLAT_A 22 and FLAT_B 22
+  demo-pass tasks of 50); 7.2 PLANT_SOLVE PASS (49 demo-pass tasks against FLAT_A 22, gain +27, needs +5); the F3 screen
+  failed, so INSTRUCTION_V1 at max 4,096 runs (g = 3,607.9 generated tokens per sample); 7.3 PILOT_NO_FEASIBLE_SR: the
+  smallest cell, S = 4 and R = 4, projects 41 one-hour H100 jobs against 12 (S = 4, R = 6: 55; S = 8, R = 4: 82); projected
+  power for a net gain of +20 of 400 at the measured d = 0.14 is 0.8318 (not UNDERPOWERED). The rule is unchanged: the
+  largest S in {4, 8, 16} and R in {4, 6, 8} whose projection fits, which at 48 selects S = 4, R = 4 at 41 jobs. S and R
+  are re-chosen from the rates PILOT.json recorded; no pilot arm is re-sampled; the pre-amendment PILOT.json, PILOT.md,
+  PILOT_CHOICE.json and PILOT_STOP.json are kept under archived names. Nothing else in sections 1 to 10 or in AMENDMENTS 0
+  to 3 changes, and this amendment grants no access to any sealed key.
