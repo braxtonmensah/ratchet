@@ -7,8 +7,9 @@ rule in part C is fixed now, before any smoke sample exists, so that the smoke c
 
 Run v2 (code b636ce5) finished growth at 06:04 ET and wrote FREEZE.json (sha256 730ec199...). The lead does not ack it.
 Reason (GROWTH_V2_DIAGNOSIS.md, measured on the run's own files):
-- every grown arm is empty: STOCK 0 helpers in all 4 rounds, ONE-SHOT 0, SHAM 0, EXEMPLAR pool n = 0;
-- so every section 6 contrast is zero by construction;
+- every grown library is empty: STOCK 0 helpers in all 4 rounds, ONE-SHOT 0, SHAM 0 (EXEMPLAR's pool holds 217
+  exemplars);
+- so STOCK sends the FLAT prompt, and COMPOUNDS and LIBRARY HELPS are unreachable by construction;
 - 1,225 of 1,600 STOCK round-1 samples stop at 4,096 tokens;
 - at most 4 of about 435 demo-passing programs per round define a top-level helper.
 
@@ -52,7 +53,8 @@ without a sealed read.
   reported separately and not charged to v3.
 - The section 8 prediction stays as registered (point +2, 80% band [-8, +14], P(COMPOUNDS) = 0.15).
 
-## Open item before registration
+## Closed item (07:06 ET)
 
-The cause of EXEMPLAR pool n = 0 in v2 must be found and fixed, or shown not to recur under v3, before part D runs. The
-builder is diagnosing it with file:line.
+The EXEMPLAR "n = 0" was a reader error by the lead; pool_R.json holds 217 exemplars (diag/BUILD_SMOKE_A5.md). There is
+a latent inconsistency for v3 to fix or document: arms.py:1003 writes the pool without `sha256` and `scaler`, so
+exemplar.load_pool (exemplar.py:155) would refuse it. Sealed sampling reads `exemplars` directly (arms.py:1376-1381).

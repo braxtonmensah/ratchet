@@ -10,14 +10,20 @@ been opened. The measured facts below come from the run's own files on Quartz (r
 |---|---|---|
 | STOCK | 0 helpers in L_1, L_2, L_3, L_4 (n_accepted 0 every round) | 165, 162, 168, 162 |
 | STATIC | L_1 = the empty STOCK round-1 library | 165, 168, 174, 164 |
-| EXEMPLAR | pool_R.json n = 0 (cause under diagnosis) | 165, 159, 169, 171 |
+| EXEMPLAR | pool_R.json: 217 exemplars (sha 48aca465... = FREEZE.json); exemplars in all 1,600 samples of rounds 2 to 4 | 165, 159, 169, 171 |
 | ONESHOT | L_one 0 helpers | 221 (one round, 16 samples per task) |
 | SHAM | 0 helpers (size-matched to STOCK) | n/a |
 | PLANT-L1 / PLANT-DRIP | 36 / 96 planted helpers (built, not grown) | n/a |
 
-So STOCK, STATIC, ONE-SHOT, SHAM and EXEMPLAR would all send the FLAT prompt in the sealed phase. Every registered
-contrast in section 6 would be zero by construction, and a NULL read from this run would say nothing about library
+So STOCK, STATIC, ONE-SHOT and SHAM would all send the FLAT prompt in the sealed phase; only EXEMPLAR differs. STOCK
+cannot beat STATIC, ONE-SHOT or SHAM (identical prompts) or FLAT-TTC (same prompt, fewer tokens), so COMPOUNDS and
+LIBRARY HELPS are unreachable by construction, and a NULL read from this run would say nothing about library
 compounding.
+
+Correction (2026-11-05 07:06 ET): the first version of this file said EXEMPLAR's pool had n = 0 and that EXEMPLAR also
+saw the FLAT prompt. That was a reader error: my one-liner looked for a `programs` or `pool` key, but the file's key is
+`exemplars`. The builder's check (diag/BUILD_SMOKE_A5.md) found 217 exemplars, matching FREEZE.json and
+round_4/round_state.json.
 
 ## Why
 
