@@ -77,3 +77,14 @@ rounds 0..10, with a t across the 4 seeds. Read from the same round files as abo
 - The hardest tasks improve 5 to 10x over 10 rounds, but at a steady or slowing rate.
 - d3-4 bends down significantly, as expected from a band approaching saturation.
 - So the linear d50 is not hiding an acceleration at the frontier.
+
+## CORRECTION (2026-11-05 18:12 ET, from an independent adversarial audit: rsi_sprint/restart/AUDIT_RSI_CONCLUSIONS_1105.md)
+- **The power statement above is OVERSTATED.** The 0.999 at m = 1.2 simulated curves that would end near d50 7.5. The seeds ended at
+  4.3 to 4.9. With the endpoint matched to what was observed, power is about 0.30 at m = 1.1 and 0.67 at m = 1.2. A takeoff that
+  starts at round 7 or later is essentially invisible to this test (power 0.28 or less). "Acceleration of 20% per round is ruled out"
+  is withdrawn.
+- **Part of the d50 rise is ruler shape, not reach.** The fitted logistic slope b flattens from 1.25 to 0.78 over the rounds. A
+  model-free d50 gains about 0.127 per round, not 0.181, and it decelerates (t -6.08, all 4 seeds). The registered label stands as
+  read (LINEAR-GROWTH by the registered rule), but the honest reading is "improves, and slows down, within 10 rounds".
+- **Per GPU-hour the gain roughly halves** (0.250 -> 0.124 d50 per GPU-hour, t -2.75), because rounds get longer.
+- **The search-space caveat** used 42 ops; the world has 54.
