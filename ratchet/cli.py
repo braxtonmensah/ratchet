@@ -233,6 +233,21 @@ def cmd_sandbox_selftest(args) -> int:
     return 0 if res['pass'] else 4
 
 
+def cmd_amend_budget(args) -> int:
+    """PREREG AMENDMENT 4: re-choose S and R at an amended sec. 7.3 budget from the recorded pilot (ratchet/amend.py)."""
+    from . import amend
+    prereg = Path(args.prereg) if args.prereg else config.REPO_DIR / 'PREREG.md'
+    try:
+        res = amend.apply_budget_amendment(Path(args.run), args.amendment, args.budget, prereg, dry_run=args.dry_run)
+    except amend.AmendRefused as e:
+        print('AMEND_REFUSED %s' % e, flush=True)
+        return 3
+    print(json.dumps(res, sort_keys=True, default=str))
+    if not res['dry_run']:
+        print('AMEND_APPLIED A%s budget=%g S=%d R=%d' % (args.amendment, args.budget, res['S'], res['R']), flush=True)
+    return 0
+
+
 def cmd_next(args) -> int:
     run = _run(args)
     print(json.dumps(chain_ok(run), sort_keys=True))
@@ -288,6 +303,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument('--map', action='store_true')
     add('verdict', cmd_verdict)
     add('next', cmd_next)
+    sp = add('amend-budget', cmd_amend_budget)
+    sp.add_argument('--amendment', required=True, help='PREREG amendment number, e.g. 4')
+    sp.add_argument('--budget', type=float, required=True, help='amended sec. 7.3 H100-hours')
+    sp.add_argument('--prereg', default=None, help='PREREG.md (default: the one beside the code)')
+    sp.add_argument('--dry-run', action='store_true')
     add('modelcheck', cmd_modelcheck)
     st = sub.add_parser('sandbox-selftest')
     st.set_defaults(fn=cmd_sandbox_selftest)

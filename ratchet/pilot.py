@@ -395,13 +395,31 @@ def units(R: int, rho: float) -> dict:
             'library_context': total - flat_units}
 
 
-def project(rates: dict, S: int, R: int) -> dict:
+def budget_hours(run_dir: Path | None = None) -> float:
+    """The sec. 7.3 H100-hour budget of a run: RUN.json h100_hours_budget when an amendment recorded one (AMENDMENT 4,
+    ratchet/amend.py), else config.H100_HOURS_BUDGET (12, as registered). A run-level budget without its amendment
+    record is refused."""
+    base = float(cfg('H100_HOURS_BUDGET'))
+    if run_dir is None:
+        return base
+    run = read_json(Path(run_dir) / 'RUN.json', {}) or {}
+    v = run.get('h100_hours_budget')
+    if v is None:
+        return base
+    rec = run.get('budget_amendment') or {}
+    if not (rec.get('id') and rec.get('prereg_block_sha256')) or float(rec.get('h100_hours_budget', -1)) != float(v):
+        raise RuntimeError(f'BUDGET_WITHOUT_AMENDMENT h100_hours_budget={v} in {run_dir}/RUN.json')
+    return float(v)
+
+
+def project(rates: dict, S: int, R: int, budget: float | None = None) -> dict:
     """Samples, tokens and H100 job-hours for (S, R) with measured rates (SPEC 1.3 to 1.5 with measured values).
 
     m_F = P_task + g, m_S = P_task + L + g (logical tokens per sample), rho = m_S / m_F.
     decode seconds = (generated + b x uncached prefill) / a; uncached prefill per sample = measured uncached prompt
     tokens per request / S (one request per task carries its S samples). Jobs = ceil(decode s / (STOP_ISSUE_S -
-    startup s)); each job is one H100-hour."""
+    startup s)); each job is one H100-hour. feasible iff jobs <= budget (default config.H100_HOURS_BUDGET)."""
+    budget = float(cfg('H100_HOURS_BUDGET') if budget is None else budget)
     g = float(rates['g'])
     p_task = float(rates['P_task'])
     L = float(rates.get('L') or cfg('LIBRARY_CAP_TOKENS'))
@@ -429,19 +447,23 @@ def project(rates: dict, S: int, R: int) -> dict:
             'uncached_prefill_tokens': prefill, 'logical_tokens': logical, 'decode_s': decode_s,
             'usable_s_per_job': usable, 'jobs': jobs, 'h100_hours': jobs,
             'required_tok_s_12h': gen / (float(cfg('H100_HOURS_BUDGET')) * 3600.0),
-            'feasible': jobs <= float(cfg('H100_HOURS_BUDGET'))}
+            'budget_h100_hours': budget, 'feasible': jobs <= budget}
 
 
-def choose_SR(rates: dict, power_sims: int | None = None) -> dict:
+def choose_SR(rates: dict, power_sims: int | None = None, budget: float | None = None,
+              power: float | None = None) -> dict:
+    """PREREG 7.3: the feasible (S, R) with the largest S x R (ties to larger S). `power` reuses an already computed
+    projected power (it depends on d only, not on the budget), so a re-choose does not re-simulate it."""
     if any(rates.get(k) is None for k in ('a', 'g', 'P_task')):
         return {'status': 'RATES_MISSING', 'S': None, 'R': None, 'grid': [], 'n_feasible': 0, 'power': None,
                 'underpowered': None, 'missing': [k for k in ('a', 'g', 'P_task') if rates.get(k) is None]}
-    grid = [project(rates, S, R) for S in cfg('S_GRID') for R in cfg('R_GRID')]
+    budget = float(cfg('H100_HOURS_BUDGET') if budget is None else budget)
+    grid = [project(rates, S, R, budget) for S in cfg('S_GRID') for R in cfg('R_GRID')]
     feas = [p for p in grid if p['feasible']]
-    out = {'grid': grid, 'n_feasible': len(feas)}
+    out = {'grid': grid, 'n_feasible': len(feas), 'budget_h100_hours': budget}
     d = rates.get('d')
     if d is not None:
-        pw = power_mc(float(d), sims=power_sims)
+        pw = float(power) if power is not None else power_mc(float(d), sims=power_sims)
         out['power'] = pw
         out['power_all5_independent'] = pw ** len(tuple(cfg('COMPARATORS')))
         out['underpowered'] = pw < float(cfg('POWER_MIN'))
@@ -481,7 +503,7 @@ def run_pilot_rules(run_dir: Path, correct_fn=None, power_sims: int | None = Non
             or not rates.get('cached_known_rows'):
         status = status if status != 'OK' else 'RATES_MISSING'
     elif status == 'OK':
-        choice = choose_SR(rates, power_sims)
+        choice = choose_SR(rates, power_sims, budget=budget_hours(run_dir))
         status = choice['status']
     return {'schema': 'ratchet.pilot.v2', 'created_et': now_et(), 'status': status, 'smoke': s1, 'plant': s2,
             'plant1': s2_plant1, 'screen': screen, 'arms': arms,
@@ -566,6 +588,11 @@ def render_pilot_md(res: dict) -> str:
          f'- d = {_fmt(r.get("d"), 4)} ({r["discordance"].get("discordant")} of {r["discordance"].get("n")} pilot '
          f'tasks differ on pass@2 test-correct between FLAT_A and FLAT_B)', '']
     if c:
+        bud = c.get('budget_h100_hours', cfg('H100_HOURS_BUDGET'))
+        am = res.get('budget_amendment') or {}
+        L += [f'Budget: {_fmt(float(bud), 0)} H100-hours' + (f' (AMENDMENT {am.get("id")}; registered '
+              f'{cfg("H100_HOURS_BUDGET")}; re-chosen from the recorded pilot rates, no re-sampling)' if am else
+              ' (as registered)') + '.', '']
         L += ['| S | R | units | samples | gen tokens | decode s | exec s | jobs (H100-h) | feasible |',
               '|---|---|---|---|---|---|---|---|---|']
         for p in c['grid']:
