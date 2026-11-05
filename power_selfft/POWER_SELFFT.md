@@ -57,3 +57,17 @@ model for a loop whose rows come from its own last adapter. Under the random wal
 any rule: false compounding 0.18 to 0.51 for one seed. Finding 1 above (task bootstrap invalid) stands. Findings 2 and 3 (QUAD_T valid,
 R = 10 single seed sufficient) are withdrawn as gate inputs. The registered design is now K = 4 seeds x R = 8 with a seed-level
 Rasch curvature t-test (AMENDMENT_SELFFT_FINAL.md, A1).
+
+## CORRECTION 2 (2026-11-05 06:27 ET): the stated range and the rule's name
+
+- Finding 1 above quoted "15.5 to 24.5% at sa 0.1, 37.5 to 41% at sa 0.25". Over all 9 simulated cells with seed noise (power_selfft.json,
+  m = 1.0, 200 runs each, Monte Carlo SE about 1.8 to 3.5 points), QUAD_TB's false-compounding rate is **0.070 to 0.410**: the table above
+  omitted the R = 10 cells (0.070 at p0 0.05, sa 0.1; 0.175 at p0 0.15, sa 0.1). The 0.070 cell is not clearly above 0.05; the other 8 are
+  (0.155 to 0.410).
+- QUAD_TB (convexity with a task bootstrap) is the R7 candidate rule, not silicyte-0127's drafted rule. The 0127 draft's HELD read was an OLS
+  slope with a task-cluster bootstrap (AMENDMENT_1_SELF_FT_DRAFT.md:216-217), which fires on any improvement (R7: 0.995 to 1.000 on linear
+  growth); its COMPOUNDS gate also required McNemar wins over ONESHOT and FROZEN8B (line 232). Any sentence that this sim showed "the drafted
+  rule would have produced a fake positive" overstates it: it shows a false-positive RATE for the R7 convexity rule.
+- Unchanged: single-trajectory task-bootstrap rules are invalid under training-seed noise; the independent VERDICT_SIM.md (random-walk noise)
+  gives 0.150 to 0.327 (logit task bootstrap) and 0.487 to 0.690 (probability scale) at S = 64 (lines 68 to 71). The registered designs use
+  seed-level tests (0127 A1; 0128).
