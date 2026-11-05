@@ -24,6 +24,17 @@ not a VOID attempt (section 6 defines VOID as PLANT-DRIP failing to beat PLANT-L
   rotating, recolouring, counting) in its own top-level function with a descriptive name, and keep transform short by
   calling those functions." It uses the same prefill.
 
+Instruction hashes (UTF-8 sha256, computed 2026-11-05 07:27 ET). Rebuilding INSTRUCTION_V1 from config.py:194-198
+gives the registered value, which checks the method.
+- V1 = cf85bc1b0ccc002e3bc93edd9e8285e41c35b28f022d517f85c011e4c7d22340.
+- P2 instruction = V1 + ' ' + the sentence = e6e37bb495c66925bcca0e38d87e0a0fda27cec8a6123c80176f75ddb619ae73.
+- The sentence alone = e994c3eb28cd7c6087cefb52749638c4a3717a95624ec4cf07b2e1e214c4cacf.
+- Prefill = "```python\n". The server renders it without the newline, because the chat template trims message
+  content (diag/BUILD_SMOKE_A5.md).
+
+If P2 is chosen, v3 adds INSTRUCTIONS['P2'], INSTRUCTION_SHAS['P2'] and an INSTRUCTION_TAILS entry, per
+VERDICT_SMOKE_A5 item 4.
+
 Whichever is chosen applies to every arm, phase, round and seed of run v3, the sealed phase included, so all arms stay
 compute-matched. Max tokens, temperature, top_p, model, thinking flag, sealed tasks, arms, gates and the section 6 rule
 are unchanged.
