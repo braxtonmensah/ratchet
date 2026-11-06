@@ -27,3 +27,10 @@ you have different ways to test the idea... don't give up at your first failure.
 
 The idea is dropped only if T1, T3 and T4 all fail with the lever confirmed and power adequate, and T5 also fails. Each failure is
 published with its diagnosis.
+
+## Amendment to P3 (21:23 ET, before any 0140 data; 0140 has not run on a GPU)
+The 0140 build gives every arm the same checker-verified multi-part task format (BUILD_GENERALIST0140.md); no one-question R-Zero-style
+arm was built. P3 is therefore restated against the arms that exist: SELF (proposer and solver both train) keeps at least half of its
+iteration-1 gain on the paired math average at iteration 4, while FROZEN_CHALLENGER (the solver trains on tasks from the untrained
+proposer, compute matched) does not. Scored with the 0140 eval harness, paired, against the measured A/A noise. The SELF_OPD and
+SEARCH_OPD arms are read under STOPRULE_SELF_OPD_1105.md and are not part of P3.
