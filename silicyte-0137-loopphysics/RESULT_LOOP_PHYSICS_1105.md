@@ -93,3 +93,14 @@ Per-depth per-step error e_d = 1 - s_d^(1/d) on MEAS (30 tasks per depth), alpha
 - Lever this points to: COMPOSITIONALITY, making a deep step as learnable as a shallow one. Candidates: subgoal decomposition (the
   model proposes intermediate states, so every search hop is short), and hindsight relabelling at every intermediate distance.
   Hard-first data pruning would feed mostly the slowest-learning rows and is not supported by this read.
+
+## Addendum 19:22 ET: decisions far from the target learn slowly (GATE_ALPHA_BY_DISTANCE_1105.md before the read: FAR_SLOW)
+Step success at remaining distance k, q_k = s_k / s_{k-1}, pooled over 4 seeds (120 MEAS tasks per depth per round), learning exponent
+alpha(k) with a 500-resample task bootstrap (90%):
+| k | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|
+| alpha(k) | 0.637 [0.530, 0.845] | 0.294 [0.176, 0.428] | 0.202 [0.137, 0.268] | 0.118 [-0.511, 0.318] | 0.244 [-0.829, 0.801] | 0.147 [-0.504, 0.693] | 0.121 [-0.328, 0.313] |
+- Band means: near (k 2-4) 0.378 [0.344, 0.455] vs far (k 5-8) 0.157 [-0.159, 0.285]; intervals do not overlap: FAR_SLOW. The far
+  values are individually noisy (ratios of small shares).
+- Together with alpha_d about 1.2/d: what limits reach is learning the decisions taken far from the goal. Subgoal decomposition turns
+  far decisions into near ones, which on these numbers learn 2-5 times faster per row.
