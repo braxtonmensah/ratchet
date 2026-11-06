@@ -1,0 +1,98 @@
+{
+ "src": "held[:2]",
+ "K": 24,
+ "MNT": 400,
+ "torch": "2.13.0+cu130",
+ "device": "NVIDIA H100 80GB HBM3",
+ "c0_vec_max_abs": 0.0,
+ "c0_vec_finite": true,
+ "sigma_finite": true,
+ "logits_c0_vs_none_identical": true,
+ "logits_c0_vs_none_maxdiff": 0.0,
+ "logits_none_vs_none_identical": true,
+ "logits_none_vs_none_maxdiff": 0.0,
+ "greedy_c0_vs_none": {
+  "rows": 2,
+  "rows_differ": 0,
+  "first_divergence": []
+ },
+ "greedy_none_vs_none": {
+  "rows": 2,
+  "rows_differ": 1,
+  "first_divergence": [
+   17
+  ]
+ },
+ "gen_s": 35.4,
+ "hook_calls_Z": 16740,
+ "sampled_none_vs_none": {
+  "rows": 48,
+  "rows_differ": 19,
+  "first_divergence": [
+   71,
+   15,
+   19,
+   17,
+   98,
+   17,
+   320,
+   316,
+   335,
+   339,
+   364,
+   363,
+   316,
+   376,
+   350,
+   137,
+   68,
+   396,
+   352
+  ]
+ },
+ "sampled_c0_vs_none": {
+  "rows": 48,
+  "rows_differ": 13,
+  "first_divergence": [
+   71,
+   86,
+   17,
+   320,
+   316,
+   335,
+   363,
+   360,
+   350,
+   155,
+   3,
+   396,
+   323
+  ]
+ },
+ "sampled_none2_vs_c0": {
+  "rows": 48,
+  "rows_differ": 16,
+  "first_divergence": [
+   15,
+   19,
+   314,
+   98,
+   17,
+   358,
+   339,
+   364,
+   316,
+   360,
+   385,
+   137,
+   3,
+   68,
+   323,
+   352
+  ]
+ },
+ "mean_len": 400.0,
+ "V0": "UNRESOLVED",
+ "peak_gb": 24.09,
+ "s": 109
+}
