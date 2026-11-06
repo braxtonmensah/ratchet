@@ -1,0 +1,8 @@
+ruler reference programs 1200 ops 20800 | verified 0128 programs 5701 ops 17265
+names not in world ops: ['codon_reverse', 'collapse_runs', 'complement', 'cutL_CCCGGG', 'cutR_CCCGGG', 'drop1', 'drop2', 'drop3', 'drop4', 'drop5']
+DEAD (in neither): 10 ['cutL_AAGCTT', 'cutL_GAATTC', 'cutR_GGATCC', 'cutR_CTGCAG', 'cutR_GTCGAC', 'cutL_GTCGAC', 'cutL_GGATCC', 'cutL_CTGCAG', 'cutR_GAATTC', 'cutR_AAGCTT']
+HARD (in references, never solved with): 2 [('cutL_CCCGGG', 1), ('cutR_CCCGGG', 2)]
+never in any ruler reference: 10 ['cutL_AAGCTT', 'cutL_GAATTC', 'cutR_GGATCC', 'cutR_CTGCAG', 'cutR_GTCGAC', 'cutL_GTCGAC', 'cutL_GGATCC', 'cutL_CTGCAG', 'cutR_GAATTC', 'cutR_AAGCTT']
+in solutions but never in references: []
+share of a beam step's 54 executions spent on DEAD ops: 0.185
+GATE_DEAD_OPS DEAD_OPS

@@ -121,3 +121,12 @@ adaptive variants.
 Hindsight rows with character-list targets equal own rows exactly, in every seed (own / hindsight): s1 5,923 / 5,923; FRONTIER_s2
 5,092 / 5,092; FRONTIER_s3 4,364 / 4,364; FRONTIER_s4 4,121 / 4,121. The defect is uniform (50% of each seed's own rows), so no seed
 pair isolates it; only the 0138 R3 lever (same rows, string targets) can measure its effect on alpha.
+
+## Addendum 19:58 ET: 10 of the 54 ops are dead weight for search (GATE_DEAD_OPS_1105.md, before the count: DEAD_OPS)
+- 1,200 reference programs of the four frozen 0129 rulers (20,800 op uses) and 5,701 verified 0128 programs (FRONTIER_s2..s4, rounds
+  0..10; 17,265 op uses): 10 ops appear in NEITHER: cutL/cutR at AAGCTT, GAATTC, GGATCC, CTGCAG and GTCGAC.
+- 2 more (cutL_CCCGGG 1 use, cutR_CCCGGG 2 uses) appear only in references and never in a solution.
+- beam2 expands all 54 ops at every step, so 10/54 = 18.5% of every step's executions (22% with the two near-dead ops) can never be
+  part of a reachable answer on these rulers. Pruning them from a loop's own search is a constant-factor cost cut, not compounding;
+  the frozen rulers keep their registered 54-op action set.
+- (The output line "names not in world ops" is a print-precedence slip in dead_ops.py; it changes no count.)
