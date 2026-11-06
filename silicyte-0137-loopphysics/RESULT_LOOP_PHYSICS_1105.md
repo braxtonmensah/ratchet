@@ -77,3 +77,19 @@ at 0.49-0.76, under 1. Reinvestment alone cannot make this loop accelerate; alph
 Same rounds per pair (GUIDE's registered label is not read): pair s2 (rounds 0..5) alpha GUIDE 0.149 (se 0.033) vs FRONTIER 0.178
 (se 0.040), ratio 0.84; pair s3 (rounds 0..4) 0.107 (se 0.024) vs 0.085 (se 0.020), ratio 1.25. **UNCLEAR** (needs >= 1.5 in both
 pairs for a lever candidate). Curriculum selection by learning progress does not obviously raise learning per row at this length.
+
+## Addendum 19:12 ET: the learning exponent falls as 1/depth (GATE_ALPHA_BY_DEPTH_1105.md before the read: HETEROGENEOUS)
+Per-depth per-step error e_d = 1 - s_d^(1/d) on MEAS (30 tasks per depth), alpha_d pooled over 4 seeds (se = sd / 2):
+| depth d | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|
+| alpha_d | 0.569 (0.070) | 0.397 (0.030) | 0.299 (0.024) | 0.241 (0.023) | 0.205 (0.044) | 0.178 (0.031) | 0.130 (0.028) |
+| d x alpha_d | 1.14 | 1.19 | 1.20 | 1.21 | 1.23 | 1.25 | 1.04 |
+- Post hoc (the 1/d form was not in the gate): alpha_d is close to 1.2 / d for depths 2-7. The error at depth d falls like N^(-1.2/d),
+  the curse-of-dimensionality rate of a learner covering a d-dimensional space, not the depth-independent rate a learner of reusable
+  steps would show.
+- Consequence: setting e_d = 0.693 / d (the 50% point) gives a reach that grows only about logarithmically in training rows, so each
+  extra depth costs a roughly constant FACTOR more data. This is a sharper statement of why 0128 decelerates than the pooled
+  alpha 0.175.
+- Lever this points to: COMPOSITIONALITY, making a deep step as learnable as a shallow one. Candidates: subgoal decomposition (the
+  model proposes intermediate states, so every search hop is short), and hindsight relabelling at every intermediate distance.
+  Hard-first data pruning would feed mostly the slowest-learning rows and is not supported by this read.
