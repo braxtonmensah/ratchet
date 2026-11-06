@@ -1,0 +1,5 @@
+seed 1 (s1): R20 delta -0.0619 gain 0.0773 ratio -0.801 | R25 delta -0.0575 gain 0.0680 ratio -0.846 | R30 delta -0.0506 gain 0.0611 ratio -0.829 | R35 delta -0.0476 gain 0.0556 ratio -0.855
+seed 2 (FRONTIER_s2): R20 delta -0.0867 gain 0.1071 ratio -0.809 | R25 delta -0.0798 gain 0.0941 ratio -0.848 | R30 delta -0.0696 gain 0.0844 ratio -0.825 | R35 delta -0.0652 gain 0.0769 ratio -0.848
+seed 3 (FRONTIER_s3): R20 delta -0.0483 gain 0.0626 ratio -0.771 | R25 delta -0.0455 gain 0.0554 ratio -0.821 | R30 delta -0.0405 gain 0.0499 ratio -0.813 | R35 delta -0.0384 gain 0.0456 ratio -0.843
+seed 4 (FRONTIER_s4): R20 delta -0.0560 gain 0.0911 ratio -0.615 | R25 delta -0.0549 gain 0.0823 ratio -0.667 | R30 delta -0.0509 gain 0.0754 ratio -0.675 | R35 delta -0.0494 gain 0.0699 ratio -0.707
+PREDICTION delta<0 for every seed and R: True
