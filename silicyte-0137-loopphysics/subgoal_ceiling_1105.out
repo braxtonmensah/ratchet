@@ -1,0 +1,5 @@
+round 0 | d4 s 0.094 oracle 0.487 d6 s 0.106 oracle 0.162 d8 s 0.003 oracle 0.009 d10 s 0.004 oracle 0.000 | crossing actual 2.67 oracle 3.95
+round 5 | d4 s 0.350 oracle 0.821 d6 s 0.197 oracle 0.495 d8 s 0.030 oracle 0.122 d10 s 0.004 oracle 0.043 | crossing actual 3.58 oracle 5.97
+round 10 | d4 s 0.485 oracle 0.894 d6 s 0.307 oracle 0.613 d8 s 0.070 oracle 0.235 d10 s 0.041 oracle 0.078 | crossing actual 3.95 oracle 6.60
+ROUND10 oracle/actual crossing ratio 1.671
+GATE_SUBGOAL_CEILING WORTH_BUILDING

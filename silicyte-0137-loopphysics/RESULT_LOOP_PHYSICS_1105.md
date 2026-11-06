@@ -104,3 +104,15 @@ alpha(k) with a 500-resample task bootstrap (90%):
   values are individually noisy (ratios of small shares).
 - Together with alpha_d about 1.2/d: what limits reach is learning the decisions taken far from the goal. Subgoal decomposition turns
   far decisions into near ones, which on these numbers learn 2-5 times faster per row.
+
+## Addendum 19:25 ET: perfect midpoint subgoals would raise reach 1.67x, and the gain grows with training (GATE_SUBGOAL_CEILING_1105.md)
+Pooled MEAS shares (120 tasks per depth per round); oracle midpoint subgoal with independent hops gives s_{d/2}^2 for a depth-d task:
+| round | s4 / oracle | s6 / oracle | s8 / oracle | s10 / oracle | 50% depth actual | 50% depth oracle | ratio |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.094 / 0.487 | 0.106 / 0.162 | 0.003 / 0.009 | 0.004 / 0.000 | 2.67 | 3.95 | 1.48 |
+| 5 | 0.350 / 0.821 | 0.197 / 0.495 | 0.030 / 0.122 | 0.004 / 0.043 | 3.58 | 5.97 | 1.67 |
+| 10 | 0.485 / 0.894 | 0.307 / 0.613 | 0.070 / 0.235 | 0.041 / 0.078 | 3.95 | 6.60 | 1.67 |
+**WORTH_BUILDING** (>= 1.5x at round 10). An upper bound: real subgoals must be proposed by the model, and hops are not independent.
+The ceiling rides on short-hop skill, the part that learns fastest (alpha near 0.38-0.64), so a loop that learns to propose subgoals
+has a mechanism by which a gain enlarges the next gain. Prior art: subgoal search (Czechowski et al., NeurIPS 2021, kSubS) and its
+adaptive variants.
