@@ -8,3 +8,7 @@
   registered 0129 seed 3 and the alpha-lever screen. His standing order: cut tests early once they show no promise.
 - Consequence: the A2 label (GUIDE-FASTER / GUIDE-SLOWER / NO-DIFFERENCE) is NOT READ and will be reported as STOPPED_EARLY; rounds
   0..5 of GUIDE_s3 stay on disk. No other 0128 rule or label changes.
+
+## 20:21 ET addendum
+GUIDE_s2 (H5 12687462.1) cancelled 20:20:59 ET after its round 6 (meas_d50 3.977), so its card runs the verified 0138 ALPHA screen.
+Both GUIDE seeds are now stopped; the A2 label is reported STOPPED_EARLY.
