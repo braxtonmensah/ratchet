@@ -72,3 +72,8 @@ rows per round would scale as d50^(gamma + beta).
 **GATE_REINVEST: NO_HELP.** At the frontier, cost per solve does not fall (the window moves with the model, so its tasks stay equally
 hard). Below the frontier it falls (amortisation), but even spending all of that saving on more rows leaves alpha (1 + gamma + beta)
 at 0.49-0.76, under 1. Reinvestment alone cannot make this loop accelerate; alpha (learning per row) has to rise.
+
+## Addendum 19:01 ET: GUIDE's learning-progress curriculum is not a clear alpha lever (GATE_GUIDE_ALPHA_1105.md, before the read)
+Same rounds per pair (GUIDE's registered label is not read): pair s2 (rounds 0..5) alpha GUIDE 0.149 (se 0.033) vs FRONTIER 0.178
+(se 0.040), ratio 0.84; pair s3 (rounds 0..4) 0.107 (se 0.024) vs 0.085 (se 0.020), ratio 1.25. **UNCLEAR** (needs >= 1.5 in both
+pairs for a lever candidate). Curriculum selection by learning progress does not obviously raise learning per row at this length.
