@@ -116,3 +116,8 @@ Pooled MEAS shares (120 tasks per depth per round); oracle midpoint subgoal with
 The ceiling rides on short-hop skill, the part that learns fastest (alpha near 0.38-0.64), so a loop that learns to propose subgoals
 has a mechanism by which a gain enlarges the next gain. Prior art: subgoal search (Czechowski et al., NeurIPS 2021, kSubS) and its
 adaptive variants.
+
+## Addendum 19:52 ET: no natural experiment on the hindsight-format defect (GATE_FORMAT_NATURAL_1105.md, before the count)
+Hindsight rows with character-list targets equal own rows exactly, in every seed (own / hindsight): s1 5,923 / 5,923; FRONTIER_s2
+5,092 / 5,092; FRONTIER_s3 4,364 / 4,364; FRONTIER_s4 4,121 / 4,121. The defect is uniform (50% of each seed's own rows), so no seed
+pair isolates it; only the 0138 R3 lever (same rows, string targets) can measure its effect on alpha.
